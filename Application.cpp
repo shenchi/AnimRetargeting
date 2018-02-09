@@ -161,7 +161,13 @@ int32_t Application::Run()
 {
 	MSG msg;
 
-	OnInit();
+	int err = OnInit();
+	if (err) return err;
+
+	QueryPerformanceFrequency(reinterpret_cast<LARGE_INTEGER*>(&timeCounterFreq));
+	QueryPerformanceCounter(reinterpret_cast<LARGE_INTEGER*>(&currentTime));
+	startTime = currentTime;
+	lastFrameTime = currentTime;
 
 	running = true;
 	while (running)
@@ -177,13 +183,16 @@ int32_t Application::Run()
 			}
 		}
 
-		float clearColor[] = { 1.0f, 0.0f, 1.0f, 1.0f };
-		context->ClearRenderTargetView(rtv, clearColor);
+		lastFrameTime = currentTime;
+		QueryPerformanceCounter(reinterpret_cast<LARGE_INTEGER*>(&currentTime));
+		uint64_t deltaTick = currentTime - lastFrameTime;
+		
+		deltaTime = (deltaTick * 1000000ul / timeCounterFreq) / 1000000.0f;
 
-		swapChain->Present(0, 0);
+		if (err = OnUpdate()) return err;
 	}
 
-	OnRelease();
+	if (err = OnRelease()) return err;
 
 	dsv->Release();
 	rtv->Release();

@@ -6,21 +6,6 @@
 
 class Application
 {
-private:
-	bool						running;
-	HINSTANCE					hInstance;
-	HWND						hWnd;
-
-	uint32_t					bufferWidth;
-	uint32_t					bufferHeight;
-
-	IDXGISwapChain*				swapChain;
-	ID3D11Device*				device;
-	ID3D11DeviceContext*		context;
-
-	ID3D11RenderTargetView*		rtv;
-	ID3D11DepthStencilView*		dsv;
-
 public:
 	int32_t Init();
 
@@ -33,4 +18,29 @@ public:
 	virtual int32_t OnInit() { return 0; }
 
 	virtual int32_t OnRelease() { return 0; }
+
+	virtual int32_t OnUpdate() { return 0; }
+
+
+protected:
+	bool						running;
+	HINSTANCE					hInstance;
+	HWND						hWnd;
+
+	uint32_t					bufferWidth;
+	uint32_t					bufferHeight;
+
+	uint64_t					timeCounterFreq;
+	uint64_t					startTime;
+	uint64_t					lastFrameTime;
+	uint64_t					currentTime;
+
+	float						deltaTime;
+
+	IDXGISwapChain*				swapChain;
+	ID3D11Device*				device;
+	ID3D11DeviceContext*		context;
+
+	ID3D11RenderTargetView*		rtv;
+	ID3D11DepthStencilView*		dsv;
 };
