@@ -1,23 +1,105 @@
 #include "Application.h"
+#include <windowsx.h>
 
 #include <cassert>
 
+#include <imgui.h>
+#include <imgui_impl_dx11.h>
+
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "d3d11.lib")
+
+extern LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 namespace
 {
 	LRESULT CALLBACK MainWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	{
+		if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam))
+			return true;
+
+		ImGuiIO& io = ImGui::GetIO();
+
 		Application* app = nullptr;
 		switch (msg)
 		{
+		case WM_LBUTTONDOWN:
+			app = reinterpret_cast<Application*>(GetWindowLongPtr(hWnd, GWLP_USERDATA));
+			if (app != nullptr && !io.WantCaptureMouse)
+			{
+				app->OnMouseDown(0);
+			}
+			break;
+
+		case WM_LBUTTONUP:
+			app = reinterpret_cast<Application*>(GetWindowLongPtr(hWnd, GWLP_USERDATA));
+			if (app != nullptr && !io.WantCaptureMouse)
+			{
+				app->OnMouseUp(0);
+			}
+			break;
+
+		case WM_RBUTTONDOWN:
+			app = reinterpret_cast<Application*>(GetWindowLongPtr(hWnd, GWLP_USERDATA));
+			if (app != nullptr && !io.WantCaptureMouse)
+			{
+				app->OnMouseDown(1);
+			}
+			break;
+
+		case WM_RBUTTONUP:
+			app = reinterpret_cast<Application*>(GetWindowLongPtr(hWnd, GWLP_USERDATA));
+			if (app != nullptr && !io.WantCaptureMouse)
+			{
+				app->OnMouseUp(1);
+			}
+			break;
+
+		case WM_MBUTTONDOWN:
+			app = reinterpret_cast<Application*>(GetWindowLongPtr(hWnd, GWLP_USERDATA));
+			if (app != nullptr && !io.WantCaptureMouse)
+			{
+				app->OnMouseDown(2);
+			}
+			break;
+
+		case WM_MBUTTONUP:
+			app = reinterpret_cast<Application*>(GetWindowLongPtr(hWnd, GWLP_USERDATA));
+			if (app != nullptr && !io.WantCaptureMouse)
+			{
+				app->OnMouseUp(2);
+			}
+			break;
+
+		case WM_MOUSEMOVE:
+			app = reinterpret_cast<Application*>(GetWindowLongPtr(hWnd, GWLP_USERDATA));
+			if (app != nullptr && !io.WantCaptureMouse)
+			{
+				app->OnMouseMove(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
+			}
+			break;
+
+		case WM_MOUSEWHEEL:
+			app = reinterpret_cast<Application*>(GetWindowLongPtr(hWnd, GWLP_USERDATA));
+			if (app != nullptr && !io.WantCaptureMouse)
+			{
+				app->OnMouseWheel(GET_WHEEL_DELTA_WPARAM(wParam));
+			}
+			break;
+
 		case WM_SIZE:
 			app = reinterpret_cast<Application*>(GetWindowLongPtr(hWnd, GWLP_USERDATA));
+			ImGui_ImplDX11_InvalidateDeviceObjects();
 			if (app != nullptr)
 			{
 				app->OnResize();
 			}
+			ImGui_ImplDX11_CreateDeviceObjects();
+
+			break;
+		case WM_SYSCOMMAND:
+			if ((wParam & 0xfff0) == SC_KEYMENU) // Disable ALT application menu
+				return 0;
 			break;
 		case WM_DESTROY:
 			PostQuitMessage(0);
@@ -154,6 +236,12 @@ int32_t Application::Init()
 
 	SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG_PTR)this);
 
+	ImGui_ImplDX11_Init(hWnd, device, context);
+
+	// Setup style
+	ImGui::StyleColorsClassic();
+	//ImGui::StyleColorsDark();
+
 	return 0;
 }
 
@@ -189,10 +277,18 @@ int32_t Application::Run()
 		
 		deltaTime = (deltaTick * 1000000ul / timeCounterFreq) / 1000000.0f;
 
+		ImGui_ImplDX11_NewFrame();
+
 		if (err = OnUpdate()) return err;
+
+		ImGui::Render();
+
+		swapChain->Present(0, 0);
 	}
 
 	if (err = OnRelease()) return err;
+
+	ImGui_ImplDX11_Shutdown();
 
 	dsv->Release();
 	rtv->Release();
@@ -200,7 +296,7 @@ int32_t Application::Run()
 	device->Release();
 	swapChain->Release();
 
-	return msg.wParam;
+	return 0;
 }
 
 int32_t Application::OnResize()

@@ -1,11 +1,79 @@
 #include "Model.h"
 
+#include <rapidjson/document.h>
+#include "rapidjson/writer.h"
+#include "rapidjson/stringbuffer.h"
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
 
 using namespace std;
 using namespace glm;
+
+namespace
+{
+	const char* HumanBoneName[HumanBone::NumHumanBones] =
+	{
+		"Hips",
+		"Spine",
+		"Spine1",
+		"Spine2",
+		"Neck",
+		"Head",
+		"LeftShoulder",
+		"LeftArm",
+		"LeftForeArm",
+		"LeftHand",
+		"LeftHandThumb1",
+		"LeftHandThumb2",
+		"LeftHandThumb3",
+		"LeftHandIndex1",
+		"LeftHandIndex2",
+		"LeftHandIndex3",
+		"LeftHandMiddle1",
+		"LeftHandMiddle2",
+		"LeftHandMiddle3",
+		"LeftHandRing1",
+		"LeftHandRing2",
+		"LeftHandRing3",
+		"LeftHandPinky1",
+		"LeftHandPinky2",
+		"LeftHandPinky3",
+		"RightShoulder",
+		"RightArm",
+		"RightForeArm",
+		"RightHand",
+		"RightHandThumb1",
+		"RightHandThumb2",
+		"RightHandThumb3",
+		"RightHandIndex1",
+		"RightHandIndex2",
+		"RightHandIndex3",
+		"RightHandMiddle1",
+		"RightHandMiddle2",
+		"RightHandMiddle3",
+		"RightHandRing1",
+		"RightHandRing2",
+		"RightHandRing3",
+		"RightHandPinky1",
+		"RightHandPinky2",
+		"RightHandPinky3",
+		"LeftUpLeg",
+		"LeftLeg",
+		"LeftFoot",
+		"LeftToeBase",
+		"RightUpLeg",
+		"RightLeg",
+		"RightFoot",
+		"RightToeBase"
+	};
+}
+
+const char * HumanBone::name(uint32_t id)
+{
+	if (id > NumHumanBones) return nullptr;
+	return HumanBoneName[id];
+}
 
 int32_t Model::Load(const char * filename)
 {
@@ -28,7 +96,96 @@ int32_t Model::Load(const char * filename)
 		LoadMeshes(scene);
 	}
 
+	if (scene->HasAnimations())
+	{
+		LoadAnimations(scene);
+	}
+
+	humanBoneBindings.resize(HumanBone::NumHumanBones, UINT32_MAX);
+
 	return 0;
+}
+
+int32_t Model::LoadAvatar(const char * filename)
+{
+	FILE* fp = fopen(filename, "rb");
+	if (!fp) return 0;
+
+	fseek(fp, 0, SEEK_END);
+	size_t size = ftell(fp);
+	fseek(fp, 0, SEEK_SET);
+	char* buffer = (char*)malloc(size + 1);
+	fread(buffer, size, 1, fp);
+	fclose(fp);
+	buffer[size] = 0;
+
+	rapidjson::Document doc;
+	doc.Parse(buffer);
+	
+	free(buffer);
+
+	assert(!doc.HasParseError());
+
+	for (uint32_t i = 0; i < HumanBone::NumHumanBones; i++)
+	{
+		const char* humanBoneName = HumanBone::name(i);
+		humanBoneBindings[i] = UINT32_MAX;
+		if (doc.HasMember(humanBoneName))
+		{
+			const char* boneName = doc[humanBoneName].GetString();
+
+			if (boneName[0] == '*') boneName = humanBoneName;
+
+			auto iter = boneTable.find(boneName);
+			if (iter != boneTable.end())
+			{
+				humanBoneBindings[i] = iter->second;
+				bones[iter->second].humanBoneId = i;
+				continue;
+			}
+			return __LINE__;
+		}
+	}
+	
+	return 0;
+}
+
+int32_t Model::SaveAvatar(const char * filename)
+{
+	rapidjson::Document doc;
+
+	for (uint32_t i = 0; i < HumanBone::NumHumanBones; i++)
+	{
+		if (humanBoneBindings[i] != UINT32_MAX)
+		{
+			const char* humanBoneName = HumanBone::name(i);
+			const char* boneName = bones[humanBoneBindings[i]].name.c_str();
+
+			rapidjson::Value k;
+			k.SetString(humanBoneName, doc.GetAllocator());
+
+			rapidjson::Value v;
+			v.SetString(boneName, doc.GetAllocator());
+
+			doc.AddMember(k, v, doc.GetAllocator());
+		}
+	}
+
+	rapidjson::StringBuffer buffer;
+	rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+	doc.Accept(writer);
+
+	FILE* fp = fopen(filename, "wb");
+	fwrite(buffer.GetString(), buffer.GetSize(), 1, fp);
+	fclose(fp);
+
+	return 0;
+}
+
+void Model::GuessHumanBoneBindings()
+{
+	//humanBoneBindings
+	
 }
 
 int32_t Model::LoadBones(const aiNode* node)
@@ -59,12 +216,14 @@ int32_t Model::LoadBones(const aiNode* node)
 			m.d1, m.d2, m.d3, m.d4
 		);
 	}
+	boneTree.resize(bones.size());
 
 	for (uint32_t i = 0; i < node->mNumChildren; i++)
 	{
 		const aiNode* child = node->mChildren[i];
 		uint32_t childId = LoadBones(child);
 		bones[childId].parent = boneId;
+		boneTree[boneId].push_back(childId);
 	}
 
 	return boneId;
@@ -73,8 +232,8 @@ int32_t Model::LoadBones(const aiNode* node)
 int32_t Model::LoadMeshes(const aiScene * scene)
 {
 	const uint32_t meshCount = scene->mNumMeshes;
-	uint32_t vertexCount = 0;
-	uint32_t indexCount = 0;
+	vertexCount = 0;
+	indexCount = 0;
 
 	meshVertexBases.resize(meshCount);
 	meshIndexBases.resize(meshCount);
@@ -184,3 +343,61 @@ int32_t Model::LoadMeshes(const aiScene * scene)
 
 	return 0;
 }
+
+int32_t Model::LoadAnimations(const aiScene * scene)
+{
+	animations.reserve(scene->mNumAnimations);
+	for (uint32_t i = 0; i < scene->mNumAnimations; i++)
+	{
+		const aiAnimation* anim = scene->mAnimations[i];
+		
+		Animation clip = {};
+		clip.name = string(anim->mName.C_Str());
+		clip.length = float(anim->mDuration / anim->mTicksPerSecond);
+
+		for (uint32_t j = 0; j < anim->mNumChannels; j++)
+		{ 
+			const aiNodeAnim* nodeAnim = anim->mChannels[j];
+			Channel channel = {};
+			channel.name = nodeAnim->mNodeName.C_Str();
+
+			channel.translations.reserve(nodeAnim->mNumPositionKeys);
+			for (uint32_t k = 0; k < nodeAnim->mNumPositionKeys; k++)
+			{
+				aiVectorKey& frame = nodeAnim->mPositionKeys[k];
+				channel.translations.push_back(Vec3Frame{
+					vec3(frame.mValue.x, frame.mValue.y, frame.mValue.z),
+					float(frame.mTime / anim->mTicksPerSecond)
+				});
+			}
+
+			channel.rotations.reserve(nodeAnim->mNumRotationKeys);
+			for (uint32_t k = 0; k < nodeAnim->mNumRotationKeys; k++)
+			{
+				aiQuatKey& frame = nodeAnim->mRotationKeys[k];
+				channel.rotations.push_back(QuatFrame{
+					quat(frame.mValue.w, frame.mValue.x, frame.mValue.y, frame.mValue.z),
+					float(frame.mTime / anim->mTicksPerSecond)
+				});
+			}
+
+			channel.scalings.reserve(nodeAnim->mNumScalingKeys);
+			for (uint32_t k = 0; k < nodeAnim->mNumScalingKeys; k++)
+			{
+				aiVectorKey& frame = nodeAnim->mScalingKeys[k];
+				channel.scalings.push_back(Vec3Frame{
+					vec3(frame.mValue.x, frame.mValue.y, frame.mValue.z),
+					float(frame.mTime / anim->mTicksPerSecond)
+				});
+			}
+
+			clip.channels.push_back(channel);
+		}
+
+		animations.push_back(clip);
+		animTable.insert(pair<string, uint32_t>(clip.name, i));
+	}
+
+	return 0;
+}
+

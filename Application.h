@@ -21,6 +21,13 @@ public:
 
 	virtual int32_t OnUpdate() { return 0; }
 
+	virtual void OnMouseDown(int button) { }
+
+	virtual void OnMouseUp(int button) { }
+
+	virtual void OnMouseMove(int x, int y) { }
+
+	virtual void OnMouseWheel(int delta) {}
 
 protected:
 	bool						running;
