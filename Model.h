@@ -21,6 +21,7 @@ struct HumanBone
 		Spine2,
 		Neck,
 		Head,
+		HeadTop,
 		LeftShoulder,
 		LeftArm,
 		LeftForeArm,
@@ -28,18 +29,23 @@ struct HumanBone
 		LeftHandThumb1,
 		LeftHandThumb2,
 		LeftHandThumb3,
+		LeftHandThumb4,
 		LeftHandIndex1,
 		LeftHandIndex2,
 		LeftHandIndex3,
+		LeftHandIndex4,
 		LeftHandMiddle1,
 		LeftHandMiddle2,
 		LeftHandMiddle3,
+		LeftHandMiddle4,
 		LeftHandRing1,
 		LeftHandRing2,
 		LeftHandRing3,
+		LeftHandRing4,
 		LeftHandPinky1,
 		LeftHandPinky2,
 		LeftHandPinky3,
+		LeftHandPinky4,
 		RightShoulder,
 		RightArm,
 		RightForeArm,
@@ -47,31 +53,40 @@ struct HumanBone
 		RightHandThumb1,
 		RightHandThumb2,
 		RightHandThumb3,
+		RightHandThumb4,
 		RightHandIndex1,
 		RightHandIndex2,
 		RightHandIndex3,
+		RightHandIndex4,
 		RightHandMiddle1,
 		RightHandMiddle2,
 		RightHandMiddle3,
+		RightHandMiddle4,
 		RightHandRing1,
 		RightHandRing2,
 		RightHandRing3,
+		RightHandRing4,
 		RightHandPinky1,
 		RightHandPinky2,
 		RightHandPinky3,
+		RightHandPinky4,
 		LeftUpLeg,
 		LeftLeg,
 		LeftFoot,
 		LeftToeBase,
+		LeftToeBaseEnd,
 		RightUpLeg,
 		RightLeg,
 		RightFoot,
 		RightToeBase,
+		RightToeBaseEnd,
 		NumHumanBones
 	};
 
-	static uint32_t parent(uint32_t id);
-	static const char* name(uint32_t id);
+	static uint32_t				parent(uint32_t id);
+	static uint32_t				target(uint32_t id);
+	static const glm::vec3&		direction(uint32_t id);
+	static const char*			name(uint32_t id);
 };
 
 struct Bone
