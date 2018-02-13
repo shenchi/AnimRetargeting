@@ -1,4 +1,5 @@
 {
+	"Root":"RootNode",
 	"Hips": "*",
 	"Spine": "*",
 	"Spine1": "*",

@@ -14,6 +14,7 @@ namespace
 {
 	const char* HumanBoneNames[HumanBone::NumHumanBones] =
 	{
+		"Root",
 		"Hips",
 		"Spine",
 		"Spine1",
@@ -70,7 +71,8 @@ namespace
 
 	HumanBone::HumanBoneId HumanBoneParents[HumanBone::NumHumanBones] =
 	{
-		HumanBone::None, //Hips,
+		HumanBone::None, //Root,
+		HumanBone::Root, //Hips,
 		HumanBone::Hips, //Spine,
 		HumanBone::Spine, //Spine1,
 		HumanBone::Spine1, //Spine2,

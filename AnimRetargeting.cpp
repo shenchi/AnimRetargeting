@@ -652,6 +652,9 @@ void AnimRetargeting::UpdateBoneMatrices(const Model & model, std::vector<glm::m
 			uint32_t humanBoneId = animModel.bones[srcBoneId].humanBoneId;
 			if (humanBoneId == UINT32_MAX) continue;
 
+			uint32_t dstBoneId = model.humanBoneBindings[humanBoneId];
+			if (dstBoneId == UINT32_MAX) continue;
+
 			vec3 t = SampleVec3Sequence(chnl.translations, time);
 			quat r = SampleQuatSequence(chnl.rotations, time);
 			vec3 s = SampleVec3Sequence(chnl.scalings, time);
@@ -664,9 +667,6 @@ void AnimRetargeting::UpdateBoneMatrices(const Model & model, std::vector<glm::m
 			{
 				quat TPoseLocalR = animModel.humanBoneLocalR[humanBoneId];
 
-				// a * b = c;
-				// inv(a) * a * b = inv(a) * c
-				// b = inv(a) * c
 				//quat deltaR = inverse(TPoseLocalR) * r;
 				quat deltaR = r * inverse(TPoseLocalR);
 
@@ -682,10 +682,16 @@ void AnimRetargeting::UpdateBoneMatrices(const Model & model, std::vector<glm::m
 				r = r * model.humanBoneLocalR[humanBoneId];
 			}
 
-			uint32_t dstBoneId = model.humanBoneBindings[humanBoneId];
-
+			vec3 tt;
 			quat rr;
-			decompose(transpose(matrices[dstBoneId]), t, rr, s);
+			if (humanBoneId == HumanBone::Hips || humanBoneId == HumanBone::Root)
+			{
+				decompose(transpose(matrices[dstBoneId]), tt, rr, s);
+			}
+			else
+			{
+				decompose(transpose(matrices[dstBoneId]), t, rr, s);
+			}
 
 			matrices[dstBoneId] = transform(t, r, s);
 

@@ -14,6 +14,7 @@ struct HumanBone
 	enum HumanBoneId
 	{
 		None = -1,
+		Root,
 		Hips,
 		Spine,
 		Spine1,
