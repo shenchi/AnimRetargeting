@@ -12,7 +12,7 @@ using namespace glm;
 
 namespace
 {
-	const char* HumanBoneName[HumanBone::NumHumanBones] =
+	const char* HumanBoneNames[HumanBone::NumHumanBones] =
 	{
 		"Hips",
 		"Spine",
@@ -67,12 +67,74 @@ namespace
 		"RightFoot",
 		"RightToeBase"
 	};
+
+	HumanBone::HumanBoneId HumanBoneParents[HumanBone::NumHumanBones] =
+	{
+		HumanBone::None, //Hips,
+		HumanBone::Hips, //Spine,
+		HumanBone::Spine, //Spine1,
+		HumanBone::Spine1, //Spine2,
+		HumanBone::Spine2, //Neck,
+		HumanBone::Neck, //Head,
+		HumanBone::Spine2, //LeftShoulder,
+		HumanBone::LeftShoulder, //LeftArm,
+		HumanBone::LeftArm, //LeftForeArm,
+		HumanBone::LeftForeArm, //LeftHand,
+		HumanBone::LeftHand, //LeftHandThumb1,
+		HumanBone::LeftHandThumb1, //LeftHandThumb2,
+		HumanBone::LeftHandThumb2, //LeftHandThumb3,
+		HumanBone::LeftHand, //LeftHandIndex1,
+		HumanBone::LeftHandIndex1, //LeftHandIndex2,
+		HumanBone::LeftHandIndex2, //LeftHandIndex3,
+		HumanBone::LeftHand, //LeftHandMiddle1,
+		HumanBone::LeftHandMiddle1, //LeftHandMiddle2,
+		HumanBone::LeftHandMiddle2, //LeftHandMiddle3,
+		HumanBone::LeftHand, //LeftHandRing1,
+		HumanBone::LeftHandRing1, //LeftHandRing2,
+		HumanBone::LeftHandRing2, //LeftHandRing3,
+		HumanBone::LeftHand, //LeftHandPinky1,
+		HumanBone::LeftHandPinky1, //LeftHandPinky2,
+		HumanBone::LeftHandPinky2, //LeftHandPinky3,
+		HumanBone::Spine2, //RightShoulder,
+		HumanBone::RightShoulder, //RightArm,
+		HumanBone::RightArm, //RightForeArm,
+		HumanBone::RightForeArm, //RightHand,
+		HumanBone::RightHand, //RightHandThumb1,
+		HumanBone::RightHandThumb1, //RightHandThumb2,
+		HumanBone::RightHandThumb2, //RightHandThumb3,
+		HumanBone::RightHand, //RightHandIndex1,
+		HumanBone::RightHandIndex1, //RightHandIndex2,
+		HumanBone::RightHandIndex2, //RightHandIndex3,
+		HumanBone::RightHand, //RightHandMiddle1,
+		HumanBone::RightHandMiddle1, //RightHandMiddle2,
+		HumanBone::RightHandMiddle2, //RightHandMiddle3,
+		HumanBone::RightHand, //RightHandRing1,
+		HumanBone::RightHandRing1, //RightHandRing2,
+		HumanBone::RightHandRing2, //RightHandRing3,
+		HumanBone::RightHand, //RightHandPinky1,
+		HumanBone::RightHandPinky1, //RightHandPinky2,
+		HumanBone::RightHandPinky2, //RightHandPinky3,
+		HumanBone::Hips, //LeftUpLeg,
+		HumanBone::LeftUpLeg, //LeftLeg,
+		HumanBone::LeftLeg, //LeftFoot,
+		HumanBone::LeftFoot, //LeftToeBase,
+		HumanBone::Hips, //RightUpLeg,
+		HumanBone::RightUpLeg, //RightLeg,
+		HumanBone::RightLeg, //RightFoot,
+		HumanBone::RightFoot //RightToeBase
+	};
+}
+
+uint32_t HumanBone::parent(uint32_t id)
+{
+	if (id >= NumHumanBones) return HumanBone::None;
+	return HumanBoneParents[id];
 }
 
 const char * HumanBone::name(uint32_t id)
 {
-	if (id > NumHumanBones) return nullptr;
-	return HumanBoneName[id];
+	if (id >= NumHumanBones) return nullptr;
+	return HumanBoneNames[id];
 }
 
 int32_t Model::Load(const char * filename)
@@ -126,10 +188,14 @@ int32_t Model::LoadAvatar(const char * filename)
 
 	assert(!doc.HasParseError());
 
+	humanBoneWorldR.resize(HumanBone::NumHumanBones, quat(1, 0, 0, 0));
+	humanBoneLocalR.resize(HumanBone::NumHumanBones, quat(1, 0, 0, 0));
+	humanBoneBindings.resize(HumanBone::NumHumanBones, UINT32_MAX);
+
 	for (uint32_t i = 0; i < HumanBone::NumHumanBones; i++)
 	{
 		const char* humanBoneName = HumanBone::name(i);
-		humanBoneBindings[i] = UINT32_MAX;
+
 		if (doc.HasMember(humanBoneName))
 		{
 			const char* boneName = doc[humanBoneName].GetString();
@@ -141,12 +207,43 @@ int32_t Model::LoadAvatar(const char * filename)
 			{
 				humanBoneBindings[i] = iter->second;
 				bones[iter->second].humanBoneId = i;
+				
+				vec3 scale, trans, skew;
+				vec4 perspective;
+				
+				decompose(inverse(transpose(bones[iter->second].offsetMatrix)),
+					scale, humanBoneWorldR[i], trans, skew, perspective);
+
+				humanBoneWorldR[i] = conjugate(humanBoneWorldR[i]);
+
 				continue;
 			}
 			return __LINE__;
 		}
+		else
+		{
+			uint32_t p = HumanBone::parent(i);
+			if (p == HumanBone::None)
+			{
+				humanBoneWorldR[i] = quat(1, 0, 0, 0);
+			}
+			else
+			{
+				humanBoneWorldR[i] = humanBoneWorldR[p];
+			}
+		}
 	}
 	
+	for (uint32_t i = 0; i < HumanBone::NumHumanBones; i++)
+	{
+		uint32_t p = HumanBone::parent(i);
+		humanBoneLocalR[i] = humanBoneWorldR[i];
+		if (p != HumanBone::None)
+		{
+			humanBoneLocalR[i] = inverse(humanBoneWorldR[p]) * humanBoneLocalR[i];
+		}
+	}
+
 	return 0;
 }
 

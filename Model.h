@@ -69,6 +69,7 @@ struct HumanBone
 		NumHumanBones
 	};
 
+	static uint32_t parent(uint32_t id);
 	static const char* name(uint32_t id);
 };
 
@@ -133,6 +134,8 @@ struct Model
 	std::unordered_map<std::string, uint32_t>	animTable;
 
 	std::vector<uint32_t>						humanBoneBindings;
+	std::vector<glm::quat>						humanBoneWorldR;
+	std::vector<glm::quat>						humanBoneLocalR;
 
 	int32_t Load(const char* filename);
 

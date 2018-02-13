@@ -51,6 +51,7 @@ namespace
 	{
 		vec3 skew; vec4 persp;
 		glm::decompose(m, s, r, t, skew, persp);
+		r = glm::conjugate(r);
 	}
 }
 
@@ -144,11 +145,17 @@ int32_t AnimRetargeting::OnInit()
 		}
 	}
 
-	//model1.Load("assets/archer_running.fbx");
-	//model1.Load("assets/archer_walking.fbx");
+	model1.Load("assets/archer_walking.fbx");
+	model1.LoadAvatar("assets/archer.json");
 
-	model1.Load("assets/KB_Movement.fbx");
-	model1.LoadAvatar("assets/KB_Movement.json");
+	//model1.Load("assets/KB.fbx");
+	//model1.LoadAvatar("assets/KB_Movement.json");
+
+	//model1.Load("assets/KB_Movement.fbx");
+	//model1.LoadAvatar("assets/KB_Movement.json");
+
+	model2.Load("assets/KB_Movement.fbx");
+	model2.LoadAvatar("assets/KB_Movement.json");
 
 	{
 		CD3D11_BUFFER_DESC desc(
@@ -281,8 +288,16 @@ int32_t AnimRetargeting::OnUpdate()
 	}
 
 	animPlayTime += deltaTime;
-	//UpdateBoneMatrices(model1, model1BoneMatrices, animId, animPlayTime);
-	UpdateHumanBoneTPose(model1, model1BoneMatrices);
+
+	if (animId < model2.animations.size())
+	{
+
+		UpdateBoneMatrices(model1, model1BoneMatrices, model2, animId, animPlayTime);
+	}
+	else
+	{
+		UpdateHumanBoneTPose(model1, model1BoneMatrices);
+	}
 
 	gizmoBuffer.clear();
 	DrawSkeletal(model1, model1BoneMatrices);
@@ -437,19 +452,19 @@ void AnimRetargeting::GUI()
 	if (ImGui::Button("Select Animation"))
 		ImGui::OpenPopup("SelectAnimation");
 
-	if (animId < model1.animations.size())
+	if (animId < model2.animations.size())
 	{
 		ImGui::SameLine();
-		ImGui::Text(model1.animations[animId].name.c_str());
+		ImGui::Text(model2.animations[animId].name.c_str());
 	}
 
 	if (ImGui::BeginPopup("SelectAnimation"))
 	{
 		if (ImGui::Selectable("(none)"))
 			animId = UINT32_MAX;
-		for (uint32_t i = 0; i < model1.animations.size(); i++)
+		for (uint32_t i = 0; i < model2.animations.size(); i++)
 		{
-			if (ImGui::Selectable(model1.animations[i].name.c_str()))
+			if (ImGui::Selectable(model2.animations[i].name.c_str()))
 				animId = i;
 		}
 		ImGui::EndPopup();
@@ -498,7 +513,7 @@ void AnimRetargeting::GUI_BoneTree(uint32_t boneId)
 			"%s[%s]",
 			bone.name.c_str(),
 			HumanBone::name(bone.humanBoneId)
-			);
+		);
 	}
 
 	if (opened)
@@ -614,6 +629,82 @@ void AnimRetargeting::UpdateBoneMatrices(const Model & model, std::vector<glm::m
 	}
 }
 
+void AnimRetargeting::UpdateBoneMatrices(const Model & model, std::vector<glm::mat4>& matrices, const Model& animModel, uint32_t animId, float time)
+{
+	for (uint32_t i = 0; i < model.bones.size(); i++)
+	{
+		matrices[i] = model.bones[i].transform;
+	}
+
+	if (animId < animModel.animations.size())
+	{
+
+		const Animation& anim = animModel.animations[animId];
+		time = std::fmodf(time, anim.length);
+
+		for (uint32_t i = 0; i < anim.channels.size(); i++)
+		{
+			const Channel& chnl = anim.channels[i];
+			auto iter = animModel.boneTable.find(chnl.name);
+			assert(iter != animModel.boneTable.end());
+			uint32_t srcBoneId = iter->second;
+
+			uint32_t humanBoneId = animModel.bones[srcBoneId].humanBoneId;
+			if (humanBoneId == UINT32_MAX) continue;
+
+			vec3 t = SampleVec3Sequence(chnl.translations, time);
+			quat r = SampleQuatSequence(chnl.rotations, time);
+			vec3 s = SampleVec3Sequence(chnl.scalings, time);
+			//
+			//decompose(transpose(animModel.bones[srcBoneId].transform), t, r, s);
+
+			uint32_t parentId = animModel.bones[srcBoneId].parent;
+			uint32_t parentHumanBoneId = animModel.bones[parentId].humanBoneId;
+			if (parentHumanBoneId != UINT32_MAX)
+			{
+				quat TPoseLocalR = animModel.humanBoneLocalR[humanBoneId];
+
+				// a * b = c;
+				// inv(a) * a * b = inv(a) * c
+				// b = inv(a) * c
+				//quat deltaR = inverse(TPoseLocalR) * r;
+				quat deltaR = r * inverse(TPoseLocalR);
+
+				quat srcParentWorldR = animModel.humanBoneWorldR[parentHumanBoneId];
+				r = srcParentWorldR * deltaR * inverse(srcParentWorldR);
+				//r = inverse(srcParentWorldR) * deltaR * srcParentWorldR;
+
+				quat dstParentWorldR = model.humanBoneWorldR[parentHumanBoneId];
+				r = inverse(dstParentWorldR) * r * dstParentWorldR;
+				//r = dstParentWorldR * r * inverse(dstParentWorldR);
+
+				//r = model.humanBoneLocalR[humanBoneId] * r;
+				r = r * model.humanBoneLocalR[humanBoneId];
+			}
+
+			uint32_t dstBoneId = model.humanBoneBindings[humanBoneId];
+
+			quat rr;
+			decompose(transpose(matrices[dstBoneId]), t, rr, s);
+
+			matrices[dstBoneId] = transform(t, r, s);
+
+		}
+
+	}
+
+	for (uint32_t i = 1; i < model.bones.size(); i++)
+	{
+		uint32_t p = model.bones[i].parent;
+		matrices[i] = matrices[i] * matrices[p];
+	}
+
+	for (uint32_t i = 0; i < model.bones.size(); i++)
+	{
+		matrices[i] = model.bones[i].offsetMatrix * matrices[i];
+	}
+}
+
 void AnimRetargeting::UpdateHumanBoneTPose(const Model & model, std::vector<glm::mat4>& matrices)
 {
 	for (uint32_t i = 0; i < model.bones.size(); i++)
@@ -645,19 +736,11 @@ void AnimRetargeting::UpdateHumanBoneTPose(const Model & model, std::vector<glm:
 	//	vec3 proposedVec = vec3(0, 1, 0);
 	//}*/
 
-	const Animation& anim = model.animations[0];
-
-	for (uint32_t i = 0; i < anim.channels.size(); i++)
+	for (uint32_t i = 0; i < HumanBone::NumHumanBones; i++)
 	{
-		const Channel& chnl = anim.channels[i];
-		auto iter = model.boneTable.find(chnl.name);
-		assert(iter != model.boneTable.end());
-		uint32_t boneId = iter->second;
+		uint32_t boneId = model.humanBoneBindings[i];
+		if (boneId == UINT32_MAX) continue;
 
-		/*vec3 t = SampleVec3Sequence(chnl.translations, time);
-		quat r = SampleQuatSequence(chnl.rotations, time);
-		vec3 s = SampleVec3Sequence(chnl.scalings, time);
-		r = quat(1, 0, 0, 0);*/
 		matrices[boneId] = inverse(model.bones[boneId].offsetMatrix);
 	}
 

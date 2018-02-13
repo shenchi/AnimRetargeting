@@ -35,6 +35,8 @@ private:
 
 	void UpdateBoneMatrices(const Model& model, std::vector<glm::mat4>& matrices, uint32_t animId, float time);
 
+	void UpdateBoneMatrices(const Model& model, std::vector<glm::mat4>& matrices, const Model& animModel, uint32_t animId, float time);
+
 	void UpdateHumanBoneTPose(const Model& model, std::vector<glm::mat4>& matrices);
 
 	void DrawSkeletal(const Model& model);
@@ -53,7 +55,8 @@ private:
 	float				pitch, yaw, dist;
 	glm::vec3			focusPoint;
 
-	Model				model1;
+	Model				model1;	// for model
+	Model				model2; // for animation
 
 	void*				vsSrc;
 	size_t				vsSrcSize;
