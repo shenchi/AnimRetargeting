@@ -370,6 +370,7 @@ int32_t Model::LoadAvatar(const char * filename)
 
 	// column-majored
 	std::vector<mat4> humanBoneWorldMatrices(HumanBone::NumHumanBones, mat4(1.0f));
+	std::vector<mat4> humanBoneLocalMatrices(HumanBone::NumHumanBones, mat4(1.0f));
 
 	humanBoneWorldR.resize(HumanBone::NumHumanBones, quat(1, 0, 0, 0));
 	humanBoneLocalR.resize(HumanBone::NumHumanBones, quat(1, 0, 0, 0));
@@ -391,12 +392,33 @@ int32_t Model::LoadAvatar(const char * filename)
 				humanBoneBindings[i] = iter->second;
 				bones[iter->second].humanBoneId = i;
 				
+				quat rot;
 				vec3 scale, trans, skew;
-				vec4 perspective;
+				vec4 persp;
 				
-				//humanBoneWorldMatrices[i] = inverse(transpose(bones[iter->second].offsetMatrix));
-				decompose(inverse(transpose(bones[iter->second].offsetMatrix)),
-					scale, humanBoneWorldR[i], trans, skew, perspective);
+				if (bones[iter->second].hasOffsetMatrix)
+				{
+					humanBoneWorldMatrices[i] = inverse(transpose(bones[iter->second].offsetMatrix));
+				}
+				else
+				{
+					uint32_t p = HumanBone::parent(i);
+					if (p == HumanBone::None)
+					{
+						humanBoneWorldMatrices[i] = mat4(1.0f);
+					}
+					else
+					{
+						decompose(transpose(bones[iter->second].transform), scale, rot, trans, skew, persp);
+
+						// column-majored
+						humanBoneWorldMatrices[i] = humanBoneWorldMatrices[p] * translate(mat4(1.0f), trans);
+					}
+				}
+
+
+				decompose(humanBoneWorldMatrices[i],
+					scale, humanBoneWorldR[i], trans, skew, persp);
 
 				humanBoneWorldR[i] = conjugate(humanBoneWorldR[i]);
 
@@ -418,22 +440,49 @@ int32_t Model::LoadAvatar(const char * filename)
 		}
 	}
 	
+	// get local rotation for each bone in human skeleton
 	for (uint32_t i = 0; i < HumanBone::NumHumanBones; i++)
 	{
 		uint32_t p = HumanBone::parent(i);
 		humanBoneLocalR[i] = humanBoneWorldR[i];
+		humanBoneLocalMatrices[i] = humanBoneWorldMatrices[i];
 		if (p != HumanBone::None)
 		{
 			humanBoneLocalR[i] = inverse(humanBoneWorldR[p]) * humanBoneLocalR[i];
+			humanBoneLocalMatrices[i] = inverse(humanBoneWorldMatrices[p]) * humanBoneLocalMatrices[i];
 		}
 	}
 
-	//for (uint32_t i = HumanBone::Hips; i < HumanBone::NumHumanBones; i++)
-	//{
-	//	vec3 boneStart = humanBoneWorldMatrices[i] * vec4(0, 0, 0, 1);
-	//	uint32_t t = HumanBone::target(i);
-	//	//if (t )
-	//}
+	humanBoneCorrectionR.resize(HumanBone::NumHumanBones, quat(1, 0, 0, 0));
+
+	// adjust 
+	for (uint32_t i = HumanBone::Hips; i < HumanBone::NumHumanBones; i++)
+	{
+		uint32_t t = HumanBone::target(i);
+		if (t == HumanBone::None)
+		{
+			continue;
+		}
+		uint32_t p = HumanBone::parent(i);
+
+		humanBoneWorldMatrices[i] = humanBoneWorldMatrices[p] * humanBoneLocalMatrices[i];
+		mat4 targetWorldMatrices = humanBoneWorldMatrices[i] * humanBoneLocalMatrices[t];
+
+		vec3 boneStart = humanBoneWorldMatrices[i] * vec4(0, 0, 0, 1);
+		vec3 boneEnd = targetWorldMatrices * vec4(0, 0, 0, 1);
+		vec3 boneDir = normalize(boneEnd - boneStart);
+		vec3 stdBoneDir = normalize(HumanBone::direction(i));
+
+		float cosDelta = dot(boneDir, stdBoneDir);
+		vec3 rotateAxis = cross(boneDir, stdBoneDir);
+
+		float s = sqrt((1 + cosDelta) * 2);
+		float invS = 1 / s;
+
+		humanBoneCorrectionR[i] = quat(s * 0.5f, rotateAxis.x * invS, rotateAxis.y * invS, rotateAxis.z * invS);
+		humanBoneCorrectionR[i] = quat(1, 0, 0, 0);
+		humanBoneWorldMatrices[i] = mat4_cast(humanBoneCorrectionR[i]) * humanBoneWorldMatrices[i];
+	}
 
 	return 0;
 }
@@ -504,6 +553,7 @@ int32_t Model::LoadBones(const aiNode* node)
 			m.d1, m.d2, m.d3, m.d4
 		);
 
+		bone.hasOffsetMatrix = 0;
 		bone.offsetMatrix = mat4(1.0f);
 	}
 	boneTree.resize(bones.size());
@@ -582,6 +632,7 @@ int32_t Model::LoadMeshes(const aiScene * scene)
 			uint32_t boneId = iter->second;
 
 			const aiMatrix4x4& m = bone->mOffsetMatrix;
+			bones[boneId].hasOffsetMatrix = 1;
 			bones[boneId].offsetMatrix = mat4(
 				m.a1, m.a2, m.a3, m.a4,
 				m.b1, m.b2, m.b3, m.b4,

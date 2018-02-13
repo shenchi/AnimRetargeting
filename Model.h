@@ -91,12 +91,12 @@ struct HumanBone
 
 struct Bone
 {
+	glm::mat4				transform;
+	glm::mat4				offsetMatrix;
 	std::string				name;
 	uint32_t				parent;
 	uint32_t				humanBoneId = UINT32_MAX;
-	//Transform				transform;
-	glm::mat4				transform;
-	glm::mat4				offsetMatrix;
+	uint32_t				hasOffsetMatrix;
 };
 
 struct Vec3Frame
@@ -152,6 +152,7 @@ struct Model
 	std::vector<uint32_t>						humanBoneBindings;
 	std::vector<glm::quat>						humanBoneWorldR;
 	std::vector<glm::quat>						humanBoneLocalR;
+	std::vector<glm::quat>						humanBoneCorrectionR;
 
 	int32_t Load(const char* filename);
 

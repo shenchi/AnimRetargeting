@@ -145,11 +145,11 @@ int32_t AnimRetargeting::OnInit()
 		}
 	}
 
-	model1.Load("assets/archer_walking.fbx");
-	model1.LoadAvatar("assets/archer.json");
+	//model1.Load("assets/archer_walking.fbx");
+	//model1.LoadAvatar("assets/archer.json");
 
-	//model1.Load("assets/KB.fbx");
-	//model1.LoadAvatar("assets/KB_Movement.json");
+	model1.Load("assets/KB.fbx");
+	model1.LoadAvatar("assets/KB_Movement.json");
 
 	//model1.Load("assets/KB_Movement.fbx");
 	//model1.LoadAvatar("assets/KB_Movement.json");
@@ -703,6 +703,12 @@ void AnimRetargeting::UpdateBoneMatrices(const Model & model, std::vector<glm::m
 	{
 		uint32_t p = model.bones[i].parent;
 		matrices[i] = matrices[i] * matrices[p];
+
+		uint32_t hId = model.bones[i].humanBoneId;
+		if (hId != UINT32_MAX)
+		{
+			matrices[i] *= mat4_cast(model.humanBoneCorrectionR[hId]);
+		}
 	}
 
 	for (uint32_t i = 0; i < model.bones.size(); i++)
