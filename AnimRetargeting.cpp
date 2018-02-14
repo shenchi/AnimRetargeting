@@ -113,18 +113,6 @@ int32_t AnimRetargeting::OnInit()
 		}
 	}
 
-	model1.Load("assets/archer_walking.fbx");
-	model1.LoadAvatar("assets/archer.json");
-
-	//model1.Load("assets/KB.fbx");
-	//model1.LoadAvatar("assets/KB_Movement.json");
-
-	//model1.Load("assets/KB_Movement.fbx");
-	//model1.LoadAvatar("assets/KB_Movement.json");
-
-	model2.Load("assets/KB_Movement.fbx");
-	model2.LoadAvatar("assets/KB_Movement.json");
-
 	{
 		CD3D11_BUFFER_DESC desc(
 			sizeof(mat4) * 4,
@@ -132,52 +120,6 @@ int32_t AnimRetargeting::OnInit()
 			D3D11_USAGE_DYNAMIC,
 			D3D11_CPU_ACCESS_WRITE);
 		if (FAILED(device->CreateBuffer(&desc, nullptr, &frameConstants)))
-		{
-			return __LINE__;
-		}
-	}
-
-	{
-		uint32_t vertexCount = model1.positions.size();
-		uint32_t vbSize = vertexCount * sizeof(float) * 16;
-		uint8_t* base = (uint8*)malloc(vbSize), *ptr = base;
-
-		memcpy(ptr, &(model1.positions[0]), sizeof(vec3) * vertexCount);
-		ptr += sizeof(vec3) * vertexCount;
-		memcpy(ptr, &(model1.normals[0]), sizeof(vec3) * vertexCount);
-		ptr += sizeof(vec3) * vertexCount;
-		memcpy(ptr, &(model1.texcoords[0]), sizeof(vec2) * vertexCount);
-		ptr += sizeof(vec2) * vertexCount;
-		memcpy(ptr, &(model1.boneIds[0]), sizeof(ivec4) * vertexCount);
-		ptr += sizeof(ivec4) * vertexCount;
-		memcpy(ptr, &(model1.boneWeights[0]), sizeof(vec4) * vertexCount);
-
-		CD3D11_BUFFER_DESC desc(vbSize, D3D11_BIND_VERTEX_BUFFER);
-		D3D11_SUBRESOURCE_DATA data = { base, 0, 0 };
-		if (FAILED(device->CreateBuffer(&desc, &data, &model1VB)))
-		{
-			return __LINE__;
-		}
-
-		free(base);
-	}
-
-	{
-		uint32_t ibSize = model1.indices.size() * sizeof(uint16_t);
-		CD3D11_BUFFER_DESC desc(ibSize, D3D11_BIND_INDEX_BUFFER);
-		D3D11_SUBRESOURCE_DATA data = { &(model1.indices[0]), 0, 0 };
-		if (FAILED(device->CreateBuffer(&desc, &data, &model1IB)))
-		{
-			return __LINE__;
-		}
-	}
-
-	{
-		model1BoneMatrices.resize(model1.bones.size());
-		UINT bufferSize = 128 * sizeof(mat4);
-
-		CD3D11_BUFFER_DESC desc(bufferSize, D3D11_BIND_CONSTANT_BUFFER, D3D11_USAGE_DYNAMIC, D3D11_CPU_ACCESS_WRITE);
-		if (FAILED(device->CreateBuffer(&desc, nullptr, &model1BoneBuffer)))
 		{
 			return __LINE__;
 		}
@@ -198,11 +140,7 @@ int32_t AnimRetargeting::OnInit()
 
 	matModel = transpose(scale(mat4(1.0f), vec3(0.01f)));
 
-	cameraPos = vec3(0, 1.0, -2.0f);
-	pitch = 0.0f;
-	yaw = 0.0f;
-	dist = 2.0f;
-	focusPoint = vec3(0, 1, 0);
+	ResetCamera();
 
 	rbuttonDown = 0;
 	lbuttonDown = 0;
@@ -411,11 +349,12 @@ void AnimRetargeting::GUI()
 	static bool showDemo = true;
 	ImGui::ShowDemoWindow(&showDemo);
 
-	ImGui::Text("Debug");
+	ImGui::Begin("Models");
 
-	ImGui::Button("Load Model");
-	ImGui::SameLine();
-	ImGui::Button("Load Animation");
+	ImGui::Button("Open Model");
+
+	selectedModelIdx = clamp(selectedModelIdx, 0u, uint32_t(openedModels.size() - 1));
+	ImGui::BeginCombo("", )
 
 	if (ImGui::Button("Select Animation"))
 		ImGui::OpenPopup("SelectAnimation");
@@ -450,6 +389,7 @@ void AnimRetargeting::GUI()
 		GUI_BoneTree(0);
 	}
 
+	ImGui::End();
 }
 
 void AnimRetargeting::GUI_BoneTree(uint32_t boneId)
@@ -814,4 +754,105 @@ void AnimRetargeting::DrawSkeletal(const Model & model, std::vector<glm::mat4>& 
 			AddLine(startPoint, z, vec3(0, 0, 1));
 		}
 	}
+}
+
+void AnimRetargeting::ResetCamera()
+{
+	cameraPos = vec3(0, 1.0, -2.0f);
+	pitch = 0.0f;
+	yaw = 0.0f;
+	dist = 2.0f;
+	focusPoint = vec3(0, 1, 0);
+}
+
+int32_t AnimRetargeting::OpenModel(const char * filename)
+{
+	auto iter = openedModelTable.find(filename);
+	if (iter != openedModelTable.end())
+	{
+		return 0;
+	}
+
+	ModelContext ctx = {};
+	ctx.model = new Model();
+	int32_t err = ctx.model->Load(filename);
+	if (err) { return err; }
+
+	ctx.name = filename;
+	Model& model = *ctx.model;
+
+	{
+		uint32_t vertexCount = model.positions.size();
+		uint32_t vbSize = vertexCount * sizeof(float) * 16;
+		uint8_t* base = (uint8*)malloc(vbSize), *ptr = base;
+
+		memcpy(ptr, &(model.positions[0]), sizeof(vec3) * vertexCount);
+		ptr += sizeof(vec3) * vertexCount;
+		memcpy(ptr, &(model.normals[0]), sizeof(vec3) * vertexCount);
+		ptr += sizeof(vec3) * vertexCount;
+		memcpy(ptr, &(model.texcoords[0]), sizeof(vec2) * vertexCount);
+		ptr += sizeof(vec2) * vertexCount;
+		memcpy(ptr, &(model.boneIds[0]), sizeof(ivec4) * vertexCount);
+		ptr += sizeof(ivec4) * vertexCount;
+		memcpy(ptr, &(model.boneWeights[0]), sizeof(vec4) * vertexCount);
+
+		CD3D11_BUFFER_DESC desc(vbSize, D3D11_BIND_VERTEX_BUFFER);
+		D3D11_SUBRESOURCE_DATA data = { base, 0, 0 };
+		if (FAILED(device->CreateBuffer(&desc, &data, &(ctx.vb))))
+		{
+			return __LINE__;
+		}
+
+		free(base);
+	}
+
+	{
+		uint32_t ibSize = model.indices.size() * sizeof(uint16_t);
+		CD3D11_BUFFER_DESC desc(ibSize, D3D11_BIND_INDEX_BUFFER);
+		D3D11_SUBRESOURCE_DATA data = { &(model.indices[0]), 0, 0 };
+		if (FAILED(device->CreateBuffer(&desc, &data, &(ctx.ib))))
+		{
+			return __LINE__;
+		}
+	}
+
+	if (!model.bones.empty())
+	{
+		model1BoneMatrices.resize(model.bones.size());
+		UINT bufferSize = 128 * sizeof(mat4);
+
+		CD3D11_BUFFER_DESC desc(bufferSize, D3D11_BIND_CONSTANT_BUFFER, D3D11_USAGE_DYNAMIC, D3D11_CPU_ACCESS_WRITE);
+		if (FAILED(device->CreateBuffer(&desc, nullptr, &(ctx.boneBuffer))))
+		{
+			return __LINE__;
+		}
+	}
+
+	uint32_t idx = openedModels.size();
+	openedModels.push_back(ctx);
+	openedModelTable.insert(std::pair<std::string, uint32_t>(filename, idx));
+
+	return 0;
+}
+
+int32_t AnimRetargeting::CloseModel(const char * filename)
+{
+	auto iter = openedModelTable.find(filename);
+	if (iter == openedModelTable.end())
+	{
+		return 0;
+	}
+
+	{
+		ModelContext& ctx = openedModels[iter->second];
+		delete ctx.model;
+		ctx.vb->Release();
+		ctx.ib->Release();
+		if (nullptr != ctx.boneBuffer) ctx.boneBuffer->Release();
+	}
+
+	openedModels.erase(openedModels.begin() + iter->second);
+	openedModelTable.erase(iter);
+
+	return 0;
 }

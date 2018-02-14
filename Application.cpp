@@ -132,7 +132,7 @@ int32_t Application::Init()
 		IDC_ARROW);                    // predefined arrow 
 	wcx.hbrBackground = (HBRUSH)GetStockObject(
 		WHITE_BRUSH);                  // white background brush 
-	wcx.lpszMenuName = L"MainMenu";    // name of menu resource 
+	wcx.lpszMenuName = nullptr;			// name of menu resource 
 	wcx.lpszClassName = L"MainWClass";  // name of window class 
 	wcx.hIconSm = nullptr;
 

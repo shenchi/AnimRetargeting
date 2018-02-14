@@ -43,6 +43,12 @@ private:
 
 	void DrawSkeletal(const Model & model, std::vector<glm::mat4>& matrices);
 
+	void ResetCamera();
+
+	int32_t OpenModel(const char* filename);
+
+	int32_t CloseModel(const char* filename);
+
 private:
 	glm::mat4			matProj;
 	glm::mat4			matView;
@@ -55,8 +61,16 @@ private:
 	float				pitch, yaw, dist;
 	glm::vec3			focusPoint;
 
-	Model				model1;	// for model
-	Model				model2; // for animation
+	struct ModelContext
+	{
+		std::string		name;
+		Model*			model;
+		ID3D11Buffer*	vb;
+		ID3D11Buffer*	ib;
+		ID3D11Buffer*	boneBuffer;
+	};
+	std::vector<ModelContext> openedModels;
+	std::unordered_map<std::string, uint32_t> openedModelTable;
 
 	void*				vsSrc;
 	size_t				vsSrcSize;
@@ -78,17 +92,10 @@ private:
 
 	ID3D11Buffer*		frameConstants;
 
-	ID3D11Buffer*		model1VB;
-	ID3D11Buffer*		model1IB;
-
-	std::vector<glm::mat4>	model1BoneMatrices;
-	ID3D11Buffer*		model1BoneBuffer;
-
 	std::vector<float>	gizmoBuffer;
 	ID3D11Buffer*		gizmoVB;
 
-	uint32_t			animId;
-	float				animPlayTime;
+	uint32_t			selectedModelIdx;
 
 	bool				showHumanBonesOnly = false;
 	bool				drawBoneAxis = false;
