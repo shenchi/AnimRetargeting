@@ -89,6 +89,10 @@ struct HumanBone
 	static const char*			name(uint32_t id);
 };
 
+extern glm::mat4 compose(const glm::vec3& t, const glm::quat& r, const glm::vec3& s);
+
+extern void decompose(const glm::mat4& m, glm::vec3& t, glm::quat& r, glm::vec3& s);
+
 struct Bone
 {
 	glm::mat4				transform;
@@ -152,7 +156,7 @@ struct Model
 	std::vector<uint32_t>						humanBoneBindings;
 	std::vector<glm::quat>						humanBoneWorldR;
 	std::vector<glm::quat>						humanBoneLocalR;
-	std::vector<glm::quat>						humanBoneCorrectionR;
+	std::vector<glm::quat>						humanBoneCorrectionLocalR;
 
 	int32_t Load(const char* filename);
 

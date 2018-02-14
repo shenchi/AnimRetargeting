@@ -306,6 +306,11 @@ int32_t Application::OnResize()
 	uint32_t newBufferWidth = rect.right - rect.left;
 	uint32_t newBufferHeight = rect.bottom - rect.top;
 
+	if (newBufferWidth == 0 || newBufferHeight == 0)
+	{
+		return 0;
+	}
+
 	if (newBufferWidth == bufferWidth && newBufferHeight == bufferHeight)
 	{
 		return 0;

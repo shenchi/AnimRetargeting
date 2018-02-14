@@ -21,38 +21,6 @@ namespace
 
 		return 0;
 	}
-
-	mat4 transform(const vec3& t, const quat& r, const vec3& s)
-	{
-
-		float a_sqr = r.w * r.w;
-		float b_sqr = r.x * r.x;
-		float c_sqr = r.y * r.y;
-		float d_sqr = r.z * r.z;
-
-		float a_b_2 = r.w * r.x * 2;
-		float a_c_2 = r.w * r.y * 2;
-		float a_d_2 = r.w * r.z * 2;
-
-		float b_c_2 = r.x * r.y * 2;
-		float b_d_2 = r.x * r.z * 2;
-
-		float c_d_2 = r.y * r.z * 2;
-
-		return mat4{
-			vec4{ s.x * (a_sqr + b_sqr - c_sqr - d_sqr), s.y * (b_c_2 - a_d_2), s.z * (a_c_2 + b_d_2), t.x },
-			vec4{ s.x * (a_d_2 + b_c_2), s.y * (a_sqr - b_sqr + c_sqr - d_sqr), s.z * (c_d_2 - a_b_2), t.y },
-			vec4{ s.x * (b_d_2 - a_c_2), s.y * (a_b_2 + c_d_2), s.z * (a_sqr - b_sqr - c_sqr + d_sqr), t.z },
-			vec4{ 0.0f, 0.0f, 0.0f, 1.0f }
-		};
-	}
-
-	void decompose(const mat4& m, vec3& t, quat& r, vec3& s)
-	{
-		vec3 skew; vec4 persp;
-		glm::decompose(m, s, r, t, skew, persp);
-		r = glm::conjugate(r);
-	}
 }
 
 int32_t AnimRetargeting::OnResize()
@@ -145,11 +113,11 @@ int32_t AnimRetargeting::OnInit()
 		}
 	}
 
-	//model1.Load("assets/archer_walking.fbx");
-	//model1.LoadAvatar("assets/archer.json");
+	model1.Load("assets/archer_walking.fbx");
+	model1.LoadAvatar("assets/archer.json");
 
-	model1.Load("assets/KB.fbx");
-	model1.LoadAvatar("assets/KB_Movement.json");
+	//model1.Load("assets/KB.fbx");
+	//model1.LoadAvatar("assets/KB_Movement.json");
 
 	//model1.Load("assets/KB_Movement.fbx");
 	//model1.LoadAvatar("assets/KB_Movement.json");
@@ -612,7 +580,7 @@ void AnimRetargeting::UpdateBoneMatrices(const Model & model, std::vector<glm::m
 			quat r = SampleQuatSequence(chnl.rotations, time);
 			vec3 s = SampleVec3Sequence(chnl.scalings, time);
 
-			matrices[boneId] = transform(t, r, s);
+			matrices[boneId] = transpose(compose(t, r, s));
 		}
 
 	}
@@ -665,7 +633,8 @@ void AnimRetargeting::UpdateBoneMatrices(const Model & model, std::vector<glm::m
 			uint32_t parentHumanBoneId = animModel.bones[parentId].humanBoneId;
 			if (parentHumanBoneId != UINT32_MAX)
 			{
-				quat TPoseLocalR = animModel.humanBoneLocalR[humanBoneId];
+				quat TPoseLocalR = animModel.humanBoneCorrectionLocalR[humanBoneId] * 
+					animModel.humanBoneLocalR[humanBoneId];
 
 				//quat deltaR = inverse(TPoseLocalR) * r;
 				quat deltaR = r * inverse(TPoseLocalR);
@@ -678,8 +647,13 @@ void AnimRetargeting::UpdateBoneMatrices(const Model & model, std::vector<glm::m
 				r = inverse(dstParentWorldR) * r * dstParentWorldR;
 				//r = dstParentWorldR * r * inverse(dstParentWorldR);
 
+
+				quat modelStdTPoseR = model.humanBoneCorrectionLocalR[humanBoneId] * 
+					model.humanBoneLocalR[humanBoneId];
+
 				//r = model.humanBoneLocalR[humanBoneId] * r;
-				r = r * model.humanBoneLocalR[humanBoneId];
+				r = r * modelStdTPoseR;
+
 			}
 
 			vec3 tt;
@@ -693,7 +667,7 @@ void AnimRetargeting::UpdateBoneMatrices(const Model & model, std::vector<glm::m
 				decompose(transpose(matrices[dstBoneId]), t, rr, s);
 			}
 
-			matrices[dstBoneId] = transform(t, r, s);
+			matrices[dstBoneId] = transpose(compose(t, r, s));
 
 		}
 
@@ -704,11 +678,11 @@ void AnimRetargeting::UpdateBoneMatrices(const Model & model, std::vector<glm::m
 		uint32_t p = model.bones[i].parent;
 		matrices[i] = matrices[i] * matrices[p];
 
-		uint32_t hId = model.bones[i].humanBoneId;
+		/*uint32_t hId = model.bones[i].humanBoneId;
 		if (hId != UINT32_MAX)
 		{
 			matrices[i] *= mat4_cast(model.humanBoneCorrectionR[hId]);
-		}
+		}*/
 	}
 
 	for (uint32_t i = 0; i < model.bones.size(); i++)

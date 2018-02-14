@@ -293,6 +293,38 @@ namespace
 	};
 }
 
+mat4 compose(const vec3& t, const quat& r, const vec3& s)
+{
+
+	float a_sqr = r.w * r.w;
+	float b_sqr = r.x * r.x;
+	float c_sqr = r.y * r.y;
+	float d_sqr = r.z * r.z;
+
+	float a_b_2 = r.w * r.x * 2;
+	float a_c_2 = r.w * r.y * 2;
+	float a_d_2 = r.w * r.z * 2;
+
+	float b_c_2 = r.x * r.y * 2;
+	float b_d_2 = r.x * r.z * 2;
+
+	float c_d_2 = r.y * r.z * 2;
+
+	return transpose(mat4{
+		vec4{ s.x * (a_sqr + b_sqr - c_sqr - d_sqr), s.y * (b_c_2 - a_d_2), s.z * (a_c_2 + b_d_2), t.x },
+		vec4{ s.x * (a_d_2 + b_c_2), s.y * (a_sqr - b_sqr + c_sqr - d_sqr), s.z * (c_d_2 - a_b_2), t.y },
+		vec4{ s.x * (b_d_2 - a_c_2), s.y * (a_b_2 + c_d_2), s.z * (a_sqr - b_sqr - c_sqr + d_sqr), t.z },
+		vec4{ 0.0f, 0.0f, 0.0f, 1.0f }
+	});
+}
+
+void decompose(const mat4& m, vec3& t, quat& r, vec3& s)
+{
+	vec3 skew; vec4 persp;
+	glm::decompose(m, s, r, t, skew, persp);
+	r = glm::conjugate(r);
+}
+
 uint32_t HumanBone::parent(uint32_t id)
 {
 	if (id >= NumHumanBones) return HumanBone::None;
@@ -307,7 +339,7 @@ uint32_t HumanBone::target(uint32_t id)
 
 const glm::vec3& HumanBone::direction(uint32_t id)
 {
-	if (id >= NumHumanBones) return vec3();
+	if (id >= NumHumanBones) return HumanBoneDefaultDirections[HumanBone::Root];
 	return HumanBoneDefaultDirections[id];
 }
 
@@ -393,8 +425,7 @@ int32_t Model::LoadAvatar(const char * filename)
 				bones[iter->second].humanBoneId = i;
 				
 				quat rot;
-				vec3 scale, trans, skew;
-				vec4 persp;
+				vec3 scale, trans;
 				
 				if (bones[iter->second].hasOffsetMatrix)
 				{
@@ -409,7 +440,7 @@ int32_t Model::LoadAvatar(const char * filename)
 					}
 					else
 					{
-						decompose(transpose(bones[iter->second].transform), scale, rot, trans, skew, persp);
+						decompose(transpose(bones[iter->second].transform), trans, rot, scale);
 
 						// column-majored
 						humanBoneWorldMatrices[i] = humanBoneWorldMatrices[p] * translate(mat4(1.0f), trans);
@@ -418,9 +449,7 @@ int32_t Model::LoadAvatar(const char * filename)
 
 
 				decompose(humanBoneWorldMatrices[i],
-					scale, humanBoneWorldR[i], trans, skew, persp);
-
-				humanBoneWorldR[i] = conjugate(humanBoneWorldR[i]);
+					trans, humanBoneWorldR[i], scale);
 
 				continue;
 			}
@@ -431,10 +460,12 @@ int32_t Model::LoadAvatar(const char * filename)
 			uint32_t p = HumanBone::parent(i);
 			if (p == HumanBone::None)
 			{
+				humanBoneWorldMatrices[i] = mat4(1.0f);
 				humanBoneWorldR[i] = quat(1, 0, 0, 0);
 			}
 			else
 			{
+				humanBoneWorldMatrices[i] = humanBoneWorldMatrices[p];
 				humanBoneWorldR[i] = humanBoneWorldR[p];
 			}
 		}
@@ -453,36 +484,71 @@ int32_t Model::LoadAvatar(const char * filename)
 		}
 	}
 
-	humanBoneCorrectionR.resize(HumanBone::NumHumanBones, quat(1, 0, 0, 0));
+	humanBoneCorrectionLocalR.resize(HumanBone::NumHumanBones, quat(1, 0, 0, 0));
+
+	fp = fopen("debug.log", "w");
 
 	// adjust 
 	for (uint32_t i = HumanBone::Hips; i < HumanBone::NumHumanBones; i++)
 	{
+		uint32_t p = HumanBone::parent(i);
+		humanBoneWorldMatrices[i] = humanBoneWorldMatrices[p] * humanBoneLocalMatrices[i];
+
 		uint32_t t = HumanBone::target(i);
 		if (t == HumanBone::None)
 		{
 			continue;
 		}
-		uint32_t p = HumanBone::parent(i);
 
-		humanBoneWorldMatrices[i] = humanBoneWorldMatrices[p] * humanBoneLocalMatrices[i];
-		mat4 targetWorldMatrices = humanBoneWorldMatrices[i] * humanBoneLocalMatrices[t];
+		if (humanBoneBindings[t] == UINT32_MAX) continue;
 
-		vec3 boneStart = humanBoneWorldMatrices[i] * vec4(0, 0, 0, 1);
-		vec3 boneEnd = targetWorldMatrices * vec4(0, 0, 0, 1);
+		// vectors in parent's coordinate system
+		vec3 boneStart = humanBoneLocalMatrices[i] * vec4(0, 0, 0, 1);
+		vec3 boneEnd = humanBoneLocalMatrices[i] * (humanBoneLocalMatrices[t] * vec4(0, 0, 0, 1));
 		vec3 boneDir = normalize(boneEnd - boneStart);
-		vec3 stdBoneDir = normalize(HumanBone::direction(i));
+
+		vec3 stdBoneDir = inverse(mat3(humanBoneWorldMatrices[p])) * normalize(HumanBone::direction(i));
 
 		float cosDelta = dot(boneDir, stdBoneDir);
-		vec3 rotateAxis = cross(boneDir, stdBoneDir);
+		if (cosDelta > 0.999f)
+		{
+			humanBoneCorrectionLocalR[i] = quat(1, 0, 0, 0);
+		}
+		else
+		{
+			float delta = acosf(cosDelta);
+			vec3 rotateAxis = normalize(cross(boneDir, stdBoneDir));
 
-		float s = sqrt((1 + cosDelta) * 2);
-		float invS = 1 / s;
+			humanBoneCorrectionLocalR[i] = angleAxis(delta, rotateAxis);
+		}
 
-		humanBoneCorrectionR[i] = quat(s * 0.5f, rotateAxis.x * invS, rotateAxis.y * invS, rotateAxis.z * invS);
-		humanBoneCorrectionR[i] = quat(1, 0, 0, 0);
-		humanBoneWorldMatrices[i] = mat4_cast(humanBoneCorrectionR[i]) * humanBoneWorldMatrices[i];
+		/*if (humanBoneBindings[t] == UINT32_MAX)
+		{
+			boneDir = stdBoneDir;
+			humanBoneCorrectionR[i] = quat(1, 0, 0, 0);
+		}*/
+
+		quat rot;
+		vec3 trans, scale;
+		decompose(humanBoneLocalMatrices[i], trans, rot, scale);
+		rot = humanBoneCorrectionLocalR[i] * rot;
+		humanBoneLocalMatrices[i] = compose(trans, rot, scale);
+		humanBoneWorldMatrices[i] = humanBoneWorldMatrices[p] * humanBoneLocalMatrices[i];
+		
+		{
+			quat q = humanBoneCorrectionLocalR[i];
+			vec3 v = degrees(eulerAngles(q));
+			fprintf(fp, "%20s: (%10.6f, %10.6f, %10.6f) <> (%10.6f, %10.6f, %10.6f)\n                      (%10.6f, %10.6f, %10.6f, %10.6f) = [%7.2f, %7.2f, %7.2f]\n",
+				HumanBone::name(i),
+				boneDir.x, boneDir.y, boneDir.z,
+				stdBoneDir.x, stdBoneDir.y, stdBoneDir.z,
+				q.w, q.x, q.y, q.z,
+				v.x, v.y, v.z
+			);
+		}
 	}
+
+	fclose(fp);
 
 	return 0;
 }
