@@ -147,16 +147,22 @@ int32_t AnimRetargeting::OnInit()
 	lastX = -1;
 	lastY = -1;
 
-	animPlayTime = 0.0f;
 
 	return 0;
 }
 
 int32_t AnimRetargeting::OnRelease()
 {
-	model1BoneBuffer->Release();
-	model1VB->Release();
-	model1IB->Release();
+	for (uint32_t i = 0; i < openedModels.size(); i++)
+	{
+		ModelContext& ctx = openedModels[i];
+
+		delete ctx.model;
+		ctx.vb->Release();
+		ctx.ib->Release();
+		if (nullptr != ctx.boneBuffer) ctx.boneBuffer->Release();
+	}
+
 	frameConstants->Release();
 	layout->Release();
 	vs->Release();
@@ -193,6 +199,7 @@ int32_t AnimRetargeting::OnUpdate()
 		context->Unmap(frameConstants, 0);
 	}
 
+	/*
 	animPlayTime += deltaTime;
 
 	if (animId < model2.animations.size())
@@ -205,14 +212,26 @@ int32_t AnimRetargeting::OnUpdate()
 		UpdateHumanBoneTPose(model1, model1BoneMatrices);
 	}
 
-	gizmoBuffer.clear();
-	DrawSkeletal(model1, model1BoneMatrices);
+	*/
 
+	gizmoBuffer.clear();
+
+	if (selectedModelIdx < openedModels.size())
 	{
-		D3D11_MAPPED_SUBRESOURCE res = {};
-		context->Map(model1BoneBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &res);
-		memcpy(res.pData, &(model1BoneMatrices[0]), sizeof(mat4) * model1BoneMatrices.size());
-		context->Unmap(model1BoneBuffer, 0);
+		ModelContext& ctx = openedModels[selectedModelIdx];
+		UpdateHumanBoneTPose(*ctx.model, ctx.boneMatrices);
+
+		{
+			D3D11_MAPPED_SUBRESOURCE res = {};
+			context->Map(ctx.boneBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &res);
+			memcpy(res.pData, &(ctx.boneMatrices[0]), sizeof(mat4) * ctx.boneMatrices.size());
+			context->Unmap(ctx.boneBuffer, 0);
+		}
+
+		if (showBones)
+		{
+			DrawSkeletal(*ctx.model, ctx.boneMatrices);
+		}
 	}
 
 	if (gizmoBuffer.size() > 0)
@@ -232,29 +251,38 @@ int32_t AnimRetargeting::OnUpdate()
 	context->RSSetViewports(1, &CD3D11_VIEWPORT(0.0f, 0.0f, (float)bufferWidth, (float)bufferHeight));
 	context->OMSetRenderTargets(1, &rtv, dsv);
 
+	if (selectedModelIdx < openedModels.size())
 	{
+		ModelContext& ctx = openedModels[selectedModelIdx];
+
 		context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 		context->IASetInputLayout(layout);
-		ID3D11Buffer* vbs[] = { model1VB, model1VB, model1VB, model1VB, model1VB };
+
+		ID3D11Buffer* vbs[] = { ctx.vb, ctx.vb, ctx.vb, ctx.vb, ctx.vb };
 		UINT strides[] = { sizeof(vec3), sizeof(vec3) , sizeof(vec2), sizeof(ivec4), sizeof(vec4) };
 		UINT offsets[] = {
 			0,
-			sizeof(vec3) * model1.vertexCount,
-			sizeof(vec3) * 2 * model1.vertexCount,
-			(sizeof(vec3) * 2 + sizeof(vec2)) * model1.vertexCount,
-			(sizeof(vec3) * 2 + sizeof(vec2) + sizeof(ivec4)) * model1.vertexCount
+			sizeof(vec3) * ctx.model->vertexCount,
+			sizeof(vec3) * 2 * ctx.model->vertexCount,
+			(sizeof(vec3) * 2 + sizeof(vec2)) * ctx.model->vertexCount,
+			(sizeof(vec3) * 2 + sizeof(vec2) + sizeof(ivec4)) * ctx.model->vertexCount
 		};
 		context->IASetVertexBuffers(0, 5, vbs, strides, offsets);
-		context->IASetIndexBuffer(model1IB, DXGI_FORMAT_R16_UINT, 0);
+		context->IASetIndexBuffer(ctx.ib, DXGI_FORMAT_R16_UINT, 0);
 
 		context->VSSetShader(vs, nullptr, 0);
 		context->PSSetShader(ps, nullptr, 0);
 
-		context->VSSetConstantBuffers(1, 1, &model1BoneBuffer);
+		context->VSSetConstantBuffers(1, 1, &(ctx.boneBuffer));
 
 		context->OMSetDepthStencilState(nullptr, 0);
 
-		context->DrawIndexed(model1.indexCount, 0, 0);
+		for (uint32_t i = 0; i < ctx.model->meshIndexBases.size(); i++)
+		{
+			context->DrawIndexed(ctx.model->meshIndexCounts[i],
+				ctx.model->meshIndexBases[i],
+				ctx.model->meshVertexBases[i]);
+		}
 	}
 
 	if (gizmoBuffer.size() > 0)
@@ -271,7 +299,7 @@ int32_t AnimRetargeting::OnUpdate()
 
 		context->OMSetDepthStencilState(gizmoDSS, 0);
 
-		context->Draw(gizmoBuffer.size() / 6, 0);
+		context->Draw(uint32_t(gizmoBuffer.size()) / 6u, 0);
 	}
 
 	return 0;
@@ -349,59 +377,154 @@ void AnimRetargeting::GUI()
 	static bool showDemo = true;
 	ImGui::ShowDemoWindow(&showDemo);
 
-	ImGui::Begin("Models");
-
-	ImGui::Button("Open Model");
-
-	selectedModelIdx = clamp(selectedModelIdx, 0u, uint32_t(openedModels.size() - 1));
-	ImGui::BeginCombo("", )
-
-	if (ImGui::Button("Select Animation"))
-		ImGui::OpenPopup("SelectAnimation");
-
-	if (animId < model2.animations.size())
-	{
-		ImGui::SameLine();
-		ImGui::Text(model2.animations[animId].name.c_str());
-	}
-
-	if (ImGui::BeginPopup("SelectAnimation"))
-	{
-		if (ImGui::Selectable("(none)"))
-			animId = UINT32_MAX;
-		for (uint32_t i = 0; i < model2.animations.size(); i++)
-		{
-			if (ImGui::Selectable(model2.animations[i].name.c_str()))
-				animId = i;
-		}
-		ImGui::EndPopup();
-	}
-
-	ImGui::Checkbox("Draw bone axis", &drawBoneAxis);
-	ImGui::SameLine();
-	ImGui::Checkbox("Show human bones only", &showHumanBonesOnly);
-	ImGui::InputFloat("Bone axis length", &boneAxisLength);
-	boneAxisLength = max(boneAxisLength, 0.0f);
-
-	if (model1.bones.size() > 0)
-	{
-		ImGui::Separator();
-		GUI_BoneTree(0);
-	}
-
-	ImGui::End();
+	GUI_Models();
 }
 
-void AnimRetargeting::GUI_BoneTree(uint32_t boneId)
+void AnimRetargeting::GUI_Models()
 {
-	bool isLeaf = model1.boneTree[boneId].empty();
+	if (ImGui::Begin("Models"))
+	{
+		if (ImGui::Button("Open Model"))
+		{
+			wchar_t initialDir[1024] = {};
+			GetCurrentDirectory(1024, initialDir);
+
+			wchar_t filename[1024] = {};
+			OPENFILENAME ofn = {};
+			ofn.lStructSize = sizeof(OPENFILENAME);
+			ofn.hwndOwner = hWnd;
+			ofn.lpstrFilter = L"*.fbx\0*.fbx\0";
+			ofn.lpstrFile = filename;
+			ofn.nMaxFile = 1024;
+			ofn.lpstrInitialDir = initialDir;
+
+			if (GetOpenFileName(&ofn))
+			{
+				std::wstring wstr(filename);
+				std::string str(wstr.begin(), wstr.end());
+
+				OpenModel(str.c_str());
+			}
+		}
+
+		if (selectedModelIdx < openedModels.size())
+		{
+			ImGui::SameLine();
+
+			if (ImGui::Button("Open Avatar"))
+			{
+				wchar_t initialDir[1024] = {};
+				GetCurrentDirectory(1024, initialDir);
+
+				wchar_t filename[1024] = {};
+				OPENFILENAME ofn = {};
+				ofn.lStructSize = sizeof(OPENFILENAME);
+				ofn.hwndOwner = hWnd;
+				ofn.lpstrFilter = L"*.json\0*.json\0";
+				ofn.lpstrFile = filename;
+				ofn.nMaxFile = 1024;
+				ofn.lpstrInitialDir = initialDir;
+
+				if (GetOpenFileName(&ofn))
+				{
+					std::wstring wstr(filename);
+					std::string str(wstr.begin(), wstr.end());
+
+					openedModels[selectedModelIdx].model->LoadAvatar(str.c_str());
+				}
+			}
+
+			ImGui::SameLine();
+
+			if (ImGui::Button("Close Model"))
+			{
+				CloseModel(openedModels[selectedModelIdx].name.c_str());
+			}
+		}
+
+		selectedModelIdx = clamp(selectedModelIdx, 0u, uint32_t(openedModels.size() - 1));
+
+		const char* previewd = "(select models)";
+		if (selectedModelIdx < openedModels.size())
+			previewd = openedModels[selectedModelIdx].name.c_str();
+
+		if (ImGui::BeginCombo("Models", previewd))
+		{
+			for (uint32_t i = 0; i < openedModels.size(); i++)
+			{
+				bool is_selected = (selectedModelIdx == i);
+				if (ImGui::Selectable(openedModels[i].name.c_str(), is_selected))
+					selectedModelIdx = i;
+				if (is_selected)
+					ImGui::SetItemDefaultFocus();
+			}
+			ImGui::EndCombo();
+		}
+
+		ImGui::Checkbox("Draw Bones", &showBones);
+		if (showBones)
+		{
+			ImGui::SameLine();
+			ImGui::Checkbox("Draw bone axis", &drawBoneAxis);
+			ImGui::SameLine();
+			ImGui::Checkbox("Show human bones only", &showHumanBonesOnly);
+			ImGui::InputFloat("Bone axis length", &boneAxisLength);
+			boneAxisLength = max(boneAxisLength, 0.0f);
+		}
+
+		if (selectedModelIdx < openedModels.size() && openedModels[selectedModelIdx].model->bones.size() > 0)
+		{
+			ImGui::Separator();
+			GUI_BoneTree(*(openedModels[selectedModelIdx].model), 0);
+		}
+
+		ImGui::End();
+	}
+}
+
+void AnimRetargeting::GUI_Animations()
+{
+	if (ImGui::Begin("Animations"))
+	{
+		selectedAnimModelIdx = clamp(selectedAnimModelIdx, 0u, uint32_t(openedModels.size()));
+
+		Model* model = nullptr;
+		if (selectedAnimModelIdx < openedModels.size())
+			model = openedModels[selectedAnimModelIdx].model;
+
+		if (nullptr != model)
+		{
+			selectedAnimIdx = clamp(selectedAnimIdx, 0u,
+				uint32_t(model->animations.size()));
+		}
+
+		const char* previewed = "(select animation)";
+
+		if (selectedAnimModelIdx < openedModels.size() &&
+			selectedAnimIdx < openedModels[selectedAnimModelIdx].model->animations.size())
+		{
+			
+		}
+
+		if (ImGui::BeginCombo("Animations", previewed))
+		{
+			ImGui::EndCombo();
+		}
+
+		ImGui::End();
+	}
+}
+
+void AnimRetargeting::GUI_BoneTree(const Model& model, uint32_t boneId)
+{
+	bool isLeaf = model.boneTree[boneId].empty();
 
 	ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick;
 
 	if (isLeaf) flags |= ImGuiTreeNodeFlags_Leaf;
 	else flags |= ImGuiTreeNodeFlags_DefaultOpen;
 
-	const Bone& bone = model1.bones[boneId];
+	const Bone& bone = model.bones[boneId];
 
 	bool opened = false;
 	if (bone.humanBoneId == UINT32_MAX)
@@ -426,9 +549,9 @@ void AnimRetargeting::GUI_BoneTree(uint32_t boneId)
 
 	if (opened)
 	{
-		for (uint32_t i = 0; i < model1.boneTree[boneId].size(); i++)
+		for (uint32_t i = 0; i < model.boneTree[boneId].size(); i++)
 		{
-			GUI_BoneTree(model1.boneTree[boneId][i]);
+			GUI_BoneTree(model, model.boneTree[boneId][i]);
 		}
 
 		ImGui::TreePop();
@@ -573,7 +696,7 @@ void AnimRetargeting::UpdateBoneMatrices(const Model & model, std::vector<glm::m
 			uint32_t parentHumanBoneId = animModel.bones[parentId].humanBoneId;
 			if (parentHumanBoneId != UINT32_MAX)
 			{
-				quat TPoseLocalR = animModel.humanBoneCorrectionLocalR[humanBoneId] * 
+				quat TPoseLocalR = animModel.humanBoneCorrectionLocalR[humanBoneId] *
 					animModel.humanBoneLocalR[humanBoneId];
 
 				//quat deltaR = inverse(TPoseLocalR) * r;
@@ -588,7 +711,7 @@ void AnimRetargeting::UpdateBoneMatrices(const Model & model, std::vector<glm::m
 				//r = dstParentWorldR * r * inverse(dstParentWorldR);
 
 
-				quat modelStdTPoseR = model.humanBoneCorrectionLocalR[humanBoneId] * 
+				quat modelStdTPoseR = model.humanBoneCorrectionLocalR[humanBoneId] *
 					model.humanBoneLocalR[humanBoneId];
 
 				//r = model.humanBoneLocalR[humanBoneId] * r;
@@ -818,8 +941,8 @@ int32_t AnimRetargeting::OpenModel(const char * filename)
 
 	if (!model.bones.empty())
 	{
-		model1BoneMatrices.resize(model.bones.size());
-		UINT bufferSize = 128 * sizeof(mat4);
+		ctx.boneMatrices.resize(model.bones.size());
+		UINT bufferSize = 256 * sizeof(mat4);
 
 		CD3D11_BUFFER_DESC desc(bufferSize, D3D11_BIND_CONSTANT_BUFFER, D3D11_USAGE_DYNAMIC, D3D11_CPU_ACCESS_WRITE);
 		if (FAILED(device->CreateBuffer(&desc, nullptr, &(ctx.boneBuffer))))

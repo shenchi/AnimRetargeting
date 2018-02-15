@@ -25,7 +25,11 @@ public:
 private:
 	void GUI();
 
-	void GUI_BoneTree(uint32_t boneId);
+	void GUI_Models();
+	
+	void GUI_Animations();
+
+	void GUI_BoneTree(const Model& model, uint32_t boneId);
 
 	void AddLine(const glm::vec3& from, const glm::vec3& to, const glm::vec3& color = glm::vec3(1.0f));
 
@@ -64,6 +68,7 @@ private:
 	struct ModelContext
 	{
 		std::string		name;
+		std::vector<glm::mat4>	boneMatrices;
 		Model*			model;
 		ID3D11Buffer*	vb;
 		ID3D11Buffer*	ib;
@@ -96,7 +101,10 @@ private:
 	ID3D11Buffer*		gizmoVB;
 
 	uint32_t			selectedModelIdx;
+	uint32_t			selectedAnimModelIdx;
+	uint32_t			selectedAnimIdx;
 
+	bool				showBones = false;
 	bool				showHumanBonesOnly = false;
 	bool				drawBoneAxis = false;
 	float				boneAxisLength = 1.0f;

@@ -8,7 +8,7 @@ cbuffer frameConstants : register (b0)
 
 cbuffer boneBuffer : register(b1)
 {
-	matrix bones[128];
+	matrix bones[256];
 }
 
 struct VSInput
