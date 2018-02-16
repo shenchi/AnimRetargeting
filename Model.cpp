@@ -325,6 +325,42 @@ void decompose(const mat4& m, vec3& t, quat& r, vec3& s)
 	r = glm::conjugate(r);
 }
 
+bool CorrectHumanBoneRotation(const Model & dstModel, const Model & srcModel, quat& rotation, uint32_t humanBoneId)
+{
+	uint32_t srcBoneId = srcModel.humanBoneBindings[humanBoneId];
+	if (srcBoneId == UINT32_MAX) return false;
+
+	uint32_t dstBoneId = dstModel.humanBoneBindings[humanBoneId];
+	if (dstBoneId == UINT32_MAX) return false;
+
+	uint32_t parentId = srcModel.bones[srcBoneId].parent;
+	uint32_t parentHumanBoneId = srcModel.bones[parentId].humanBoneId;
+	if (parentHumanBoneId != UINT32_MAX)
+	{
+		quat TPoseLocalR = srcModel.humanBoneCorrectionLocalR[humanBoneId] *
+			srcModel.humanBoneLocalR[humanBoneId];
+
+		//quat deltaR = inverse(TPoseLocalR) * r;
+		quat deltaR = rotation * inverse(TPoseLocalR);
+
+		quat srcParentWorldR = srcModel.humanBoneWorldR[parentHumanBoneId];
+		deltaR = srcParentWorldR * deltaR * inverse(srcParentWorldR);
+		//r = inverse(srcParentWorldR) * deltaR * srcParentWorldR;
+
+		quat dstParentWorldR = dstModel.humanBoneWorldR[parentHumanBoneId];
+		deltaR = inverse(dstParentWorldR) * deltaR * dstParentWorldR;
+		//r = dstParentWorldR * r * inverse(dstParentWorldR);
+
+		quat modelStdTPoseR = dstModel.humanBoneCorrectionLocalR[humanBoneId] *
+			dstModel.humanBoneLocalR[humanBoneId];
+
+		//r = model.humanBoneLocalR[humanBoneId] * r;
+		rotation = deltaR * modelStdTPoseR;
+
+	}
+	return true;
+}
+
 uint32_t HumanBone::parent(uint32_t id)
 {
 	if (id >= NumHumanBones) return HumanBone::None;
@@ -375,10 +411,82 @@ int32_t Model::Load(const char * filename)
 		LoadAnimations(scene);
 	}
 
-	humanBoneBindings.resize(HumanBone::NumHumanBones, UINT32_MAX);
-
 	return 0;
 }
+
+//int32_t Model::Save(const char * filename)
+//{
+//	aiScene scene = aiScene();
+//	Assimp::Exporter exporter;
+//	
+//	// bones
+//	vector<aiNode> nodes(bones.size());
+//	vector<size_t> nodeTreeIndices(boneTree.size(), 0);
+//	vector<size_t> nodeTreeChildrenCounts(boneTree.size(), 0);
+//
+//	size_t nodeTreeSize = 0;
+//	for (uint32_t i = 0; i < boneTree.size(); i++)
+//	{
+//		nodeTreeIndices[i] = nodeTreeSize;
+//		nodeTreeChildrenCounts[i] = boneTree[i].size();
+//		nodeTreeSize += boneTree[i].size();
+//	}
+//
+//	vector<aiNode*> nodeTree(nodeTreeSize, nullptr);
+//
+//	for (uint32_t i = 0; i < boneTree.size(); i++)
+//	{
+//		for (uint32_t j = 0; j < boneTree[i].size(); j++)
+//		{
+//			nodeTree[nodeTreeIndices[i] + j] = &nodes[boneTree[i][j]];
+//		}
+//	}
+//
+//	scene.mRootNode = &nodes[0];
+//
+//	for (uint32_t i = 0; i < bones.size(); i++)
+//	{
+//		uint32_t p = bones[i].parent;
+//		if (p != UINT32_MAX)
+//		{
+//			nodes[i].mParent = &nodes[p];
+//		}
+//		if (nodeTreeChildrenCounts[i] > 0)
+//		{
+//			nodes[i].mNumChildren = nodeTreeChildrenCounts[i];
+//			nodes[i].mChildren = reinterpret_cast<aiNode**>(nodeTree[nodeTreeIndices[i]]);
+//		}
+//
+//		nodes[i].mName = bones[i].name;
+//
+//		const mat4& m = bones[i].transform;
+//		nodes[i].mTransformation = aiMatrix4x4(
+//			m[0][0], m[0][1], m[0][2], m[0][3],
+//			m[1][0], m[1][1], m[1][2], m[1][3],
+//			m[2][0], m[2][1], m[2][2], m[2][3],
+//			m[3][0], m[3][1], m[3][2], m[3][3]
+//		);
+//	}
+//
+//	// meshes
+//
+//	vector<aiMesh> meshes(meshVertexBases.size());
+//
+//	scene.mMeshes = reinterpret_cast<aiMesh**>(&(meshes[0]));
+//	scene.mNumMeshes = meshes.size();
+//
+//	for (uint32_t i = 0; i < scene.mNumMeshes; i++)
+//	{
+//		aiMesh& mesh = meshes[i];
+//		mesh.
+//	}
+//
+//	// animations
+//
+//
+//	// export
+//	return exporter.Export(&scene, "fbx", filename);
+//}
 
 int32_t Model::LoadAvatar(const char * filename)
 {
@@ -602,15 +710,6 @@ int32_t Model::LoadBones(const aiNode* node)
 
 		boneTable.insert(pair<string, uint32_t>(bone.name, boneId));
 		
-		/*aiVector3D t, s;
-		aiQuaternion r;
-		node->mTransformation.Decompose(s, r, t);
-		
-		bone.transform = Transform(
-			vec3(t.x, t.y, t.z),
-			quat(r.w, r.x, r.y, r.z),
-			vec3(s.x, s.y, s.z));*/
-
 		const aiMatrix4x4& m = node->mTransformation;
 		bone.transform = mat4(
 			m.a1, m.a2, m.a3, m.a4,
@@ -760,6 +859,8 @@ int32_t Model::LoadAnimations(const aiScene * scene)
 		
 		Animation clip = {};
 		clip.name = string(anim->mName.C_Str());
+		clip.lengthInTicks = float(anim->mDuration);
+		clip.ticksPerSecond = float(anim->mTicksPerSecond);
 		clip.length = float(anim->mDuration / anim->mTicksPerSecond);
 
 		for (uint32_t j = 0; j < anim->mNumChannels; j++)
@@ -774,7 +875,7 @@ int32_t Model::LoadAnimations(const aiScene * scene)
 				aiVectorKey& frame = nodeAnim->mPositionKeys[k];
 				channel.translations.push_back(Vec3Frame{
 					vec3(frame.mValue.x, frame.mValue.y, frame.mValue.z),
-					float(frame.mTime / anim->mTicksPerSecond)
+					float(frame.mTime)
 				});
 			}
 
@@ -784,7 +885,7 @@ int32_t Model::LoadAnimations(const aiScene * scene)
 				aiQuatKey& frame = nodeAnim->mRotationKeys[k];
 				channel.rotations.push_back(QuatFrame{
 					quat(frame.mValue.w, frame.mValue.x, frame.mValue.y, frame.mValue.z),
-					float(frame.mTime / anim->mTicksPerSecond)
+					float(frame.mTime)
 				});
 			}
 
@@ -794,7 +895,7 @@ int32_t Model::LoadAnimations(const aiScene * scene)
 				aiVectorKey& frame = nodeAnim->mScalingKeys[k];
 				channel.scalings.push_back(Vec3Frame{
 					vec3(frame.mValue.x, frame.mValue.y, frame.mValue.z),
-					float(frame.mTime / anim->mTicksPerSecond)
+					float(frame.mTime)
 				});
 			}
 

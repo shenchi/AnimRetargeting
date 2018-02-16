@@ -5,6 +5,17 @@
 
 class AnimRetargeting : public Application
 {
+private:
+	struct ModelContext
+	{
+		std::string		name;
+		std::vector<glm::mat4>	boneMatrices;
+		Model*			model;
+		ID3D11Buffer*	vb;
+		ID3D11Buffer*	ib;
+		ID3D11Buffer*	boneBuffer;
+	};
+
 public:
 	virtual int32_t OnResize() override;
 
@@ -53,6 +64,8 @@ private:
 
 	int32_t CloseModel(const char* filename);
 
+	int32_t ExportAnimation(const char* filename, const ModelContext& meshModel, const ModelContext& animModel, uint32_t animId);
+
 private:
 	glm::mat4			matProj;
 	glm::mat4			matView;
@@ -65,15 +78,6 @@ private:
 	float				pitch, yaw, dist;
 	glm::vec3			focusPoint;
 
-	struct ModelContext
-	{
-		std::string		name;
-		std::vector<glm::mat4>	boneMatrices;
-		Model*			model;
-		ID3D11Buffer*	vb;
-		ID3D11Buffer*	ib;
-		ID3D11Buffer*	boneBuffer;
-	};
 	std::vector<ModelContext> openedModels;
 	std::unordered_map<std::string, uint32_t> openedModelTable;
 
@@ -103,6 +107,12 @@ private:
 	uint32_t			selectedModelIdx;
 	uint32_t			selectedAnimModelIdx;
 	uint32_t			selectedAnimIdx;
+
+	float				modelScale = 0.01f;
+
+	bool				isAnimPlaying = false;
+	float				animPlaybackTime = 0.0f;
+	float				animPlaybackSpeed = 1.0f;
 
 	bool				showBones = false;
 	bool				showHumanBonesOnly = false;

@@ -98,7 +98,7 @@ struct Bone
 	glm::mat4				transform;
 	glm::mat4				offsetMatrix;
 	std::string				name;
-	uint32_t				parent;
+	uint32_t				parent = UINT32_MAX;
 	uint32_t				humanBoneId = UINT32_MAX;
 	uint32_t				hasOffsetMatrix;
 };
@@ -127,6 +127,8 @@ struct Animation
 {
 	std::string				name;
 	float					length;
+	float					lengthInTicks;
+	float					ticksPerSecond;
 	std::vector<Channel>	channels;
 };
 
@@ -173,3 +175,5 @@ private:
 
 	int32_t LoadAnimations(const struct aiScene* scene);
 };
+
+extern bool CorrectHumanBoneRotation(const Model& dstModel, const Model& srcModel, glm::quat& rotation, uint32_t humanBoneId);
