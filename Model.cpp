@@ -526,6 +526,7 @@ int32_t Model::LoadAvatar(const char * filename)
 	std::vector<mat4> humanBoneWorldMatrices(HumanBone::NumHumanBones, mat4(1.0f));
 	std::vector<mat4> humanBoneLocalMatrices(HumanBone::NumHumanBones, mat4(1.0f));
 
+	humanBoneLocalT.resize(HumanBone::NumHumanBones, vec3(0, 0, 0));
 	humanBoneWorldR.resize(HumanBone::NumHumanBones, quat(1, 0, 0, 0));
 	humanBoneLocalR.resize(HumanBone::NumHumanBones, quat(1, 0, 0, 0));
 	humanBoneBindings.resize(HumanBone::NumHumanBones, UINT32_MAX);
@@ -603,6 +604,13 @@ int32_t Model::LoadAvatar(const char * filename)
 		{
 			humanBoneLocalR[i] = inverse(humanBoneWorldR[p]) * humanBoneLocalR[i];
 			humanBoneLocalMatrices[i] = inverse(humanBoneWorldMatrices[p]) * humanBoneLocalMatrices[i];
+		}
+
+		{
+			vec3 t, s;
+			quat r;
+			decompose(humanBoneLocalMatrices[i], t, r, s);
+			humanBoneLocalT[i] = t;
 		}
 	}
 

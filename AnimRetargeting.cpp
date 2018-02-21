@@ -606,7 +606,7 @@ void AnimRetargeting::GUI_Animations()
 				OPENFILENAME ofn = {};
 				ofn.lStructSize = sizeof(OPENFILENAME);
 				ofn.hwndOwner = hWnd;
-				ofn.lpstrFilter = L"*.fbx\0*.fbx\0";
+				ofn.lpstrFilter = L"*.x\0*.x\0";
 				ofn.lpstrFile = filename;
 				ofn.nMaxFile = 1024;
 				ofn.lpstrInitialDir = initialDir;
@@ -1124,6 +1124,12 @@ int32_t AnimRetargeting::ExportAnimation(const char * filename, const ModelConte
 
 	aiScene* scene = const_cast<aiScene*>(importer.ReadFile(meshModel.name, flags));
 	
+	if (nullptr == scene)
+	{
+		MessageBoxA(hWnd, importer.GetErrorString(), "Error", MB_OK);
+		return __LINE__;
+	}
+
 	uint32_t backupNumAnimations = scene->mNumAnimations;
 	aiAnimation** backupAnimations = scene->mAnimations;
 
@@ -1137,39 +1143,113 @@ int32_t AnimRetargeting::ExportAnimation(const char * filename, const ModelConte
 	targetAnim.mDuration = srcAnim.lengthInTicks;
 	targetAnim.mTicksPerSecond = srcAnim.ticksPerSecond;
 
-	std::vector<aiNodeAnim> channels(srcAnim.channels.size());
-	std::vector<size_t> transStartIndices(srcAnim.channels.size());
-	std::vector<size_t> rotStartIndices(srcAnim.channels.size());
-	std::vector<size_t> scaleStartIndices(srcAnim.channels.size());
+	std::vector<uint32_t> channelIds;
+
+	for (size_t iChannel = 0; iChannel < srcAnim.channels.size(); iChannel++)
+	{
+		const Channel& srcChnl = srcAnim.channels[iChannel];
+		//aiNodeAnim& targetChnl = channels[iChannel];
+
+		auto iter = srcModel.boneTable.find(srcChnl.name);
+		assert(iter != srcModel.boneTable.end());
+
+		uint32_t srcBoneId = iter->second;
+
+		uint32_t humanBoneId = srcModel.bones[srcBoneId].humanBoneId;
+		if (humanBoneId == UINT32_MAX) continue;
+
+		uint32_t dstBoneId = dstModel.humanBoneBindings[humanBoneId];
+		if (dstBoneId == UINT32_MAX) continue;
+
+		channelIds.push_back(iChannel);
+	}
+
+	std::vector<aiNodeAnim> channels(channelIds.size());
+	std::vector<aiNodeAnim*> channelPtrs(channelIds.size());
+
+	for (size_t i= 0; i < channelIds.size(); i++)
+	{
+		channelPtrs[i] = &(channels[i]);
+	}
+
+	targetAnim.mNumChannels = channelIds.size();
+	targetAnim.mChannels = &(channelPtrs[0]);
+
+	std::vector<size_t> transStartIndices(channelIds.size());
+	std::vector<size_t> rotStartIndices(channelIds.size());
+	std::vector<size_t> scaleStartIndices(channelIds.size());
 
 	size_t totalTranslationKeys = 0;
 	size_t totalRotatoinKeys = 0;
 	size_t totalScalingKeys = 0;
 
-	for (size_t i = 0; i < srcAnim.channels.size(); i++)
+	for (size_t i = 0; i < channelIds.size(); i++)
 	{
+		uint32_t chnlId = channelIds[i];
+
 		transStartIndices[i] = totalTranslationKeys;
-		totalTranslationKeys += srcAnim.channels[i].translations.size();
+		totalTranslationKeys += srcAnim.channels[chnlId].translations.size();
 
 		rotStartIndices[i] = totalRotatoinKeys;
-		totalRotatoinKeys += srcAnim.channels[i].rotations.size();
+		totalRotatoinKeys += srcAnim.channels[chnlId].rotations.size();
 
 		scaleStartIndices[i] = totalScalingKeys;
-		totalScalingKeys += srcAnim.channels[i].scalings.size();
+		totalScalingKeys += srcAnim.channels[chnlId].scalings.size();
 	}
 
 	std::vector<aiVectorKey> translations(totalTranslationKeys);
 	std::vector<aiQuatKey> rotations(totalRotatoinKeys);
 	std::vector<aiVectorKey> scalings(totalScalingKeys);
 
-	for (size_t iChannel = 0; iChannel < srcAnim.channels.size(); iChannel++)
+	for (size_t iChannel = 0; iChannel < channelIds.size(); iChannel++)
 	{
-		const Channel& srcChnl = srcAnim.channels[iChannel];
+		const Channel& srcChnl = srcAnim.channels[channelIds[iChannel]];
 		aiNodeAnim& targetChnl = channels[iChannel];
 
 		targetChnl.mNodeName = srcChnl.name;
 
-		if (srcChnl.translations.size() > 0)
+		auto iter = srcModel.boneTable.find(srcChnl.name);
+		assert(iter != srcModel.boneTable.end());
+
+		uint32_t srcBoneId = iter->second;
+
+		uint32_t humanBoneId = srcModel.bones[srcBoneId].humanBoneId;
+		if (humanBoneId == UINT32_MAX) continue;
+
+		uint32_t dstBoneId = dstModel.humanBoneBindings[humanBoneId];
+		if (dstBoneId == UINT32_MAX) continue;
+
+		if (humanBoneId == HumanBone::Root || humanBoneId == HumanBone::Hips)
+		{
+			targetChnl.mNumPositionKeys = uint32_t(srcChnl.translations.size());
+			targetChnl.mPositionKeys = &translations[transStartIndices[iChannel]];
+
+			for (uint32_t k = 0; k < targetChnl.mNumPositionKeys; k++)
+			{
+				targetChnl.mPositionKeys[k].mTime = srcChnl.translations[k].time;
+				const glm::vec3& v = srcChnl.translations[k].value;
+				targetChnl.mPositionKeys[k].mValue = aiVector3D(v.x, v.y, v.z);
+			}
+		}
+		else
+		{
+			targetChnl.mNumPositionKeys = 1;
+			targetChnl.mPositionKeys = &translations[transStartIndices[iChannel]];
+			targetChnl.mPositionKeys[0].mTime = 0;
+			const glm::vec3 v = srcModel.humanBoneLocalT[humanBoneId];
+			targetChnl.mPositionKeys[0].mValue = aiVector3D(v.x, v.y, v.z);
+		}
+
+		{
+			targetChnl.mNumScalingKeys = 1;
+			targetChnl.mScalingKeys = &scalings[scaleStartIndices[iChannel]];
+			targetChnl.mScalingKeys[0].mTime = 0;
+			targetChnl.mScalingKeys[0].mValue = aiVector3D(1.0f, 1.0f, 1.0f);
+		}
+
+		//srcModel.humanbone
+
+		/*if (srcChnl.translations.size() > 0)
 		{
 			targetChnl.mNumPositionKeys = uint32_t(srcChnl.translations.size());
 			targetChnl.mPositionKeys = &translations[transStartIndices[iChannel]];
@@ -1193,7 +1273,7 @@ int32_t AnimRetargeting::ExportAnimation(const char * filename, const ModelConte
 				const glm::vec3& v = srcChnl.scalings[k].value;
 				targetChnl.mScalingKeys[k].mValue = aiVector3D(v.x, v.y, v.z);
 			}
-		}
+		}*/
 
 		if (srcChnl.rotations.size() > 0)
 		{
@@ -1204,59 +1284,20 @@ int32_t AnimRetargeting::ExportAnimation(const char * filename, const ModelConte
 			{
 				targetChnl.mRotationKeys[k].mTime = srcChnl.rotations[k].time;
 				glm::quat r = srcChnl.rotations[k].value;
-
-				do
-				{
-					auto iter = srcModel.boneTable.find(srcChnl.name);
-					assert(iter != srcModel.boneTable.end());
-					uint32_t srcBoneId = iter->second;
-
-					uint32_t humanBoneId = srcModel.bones[srcBoneId].humanBoneId;
-					if (humanBoneId == UINT32_MAX) break;
-
-					uint32_t dstBoneId = dstModel.humanBoneBindings[humanBoneId];
-					if (dstBoneId == UINT32_MAX) break;
-
-					uint32_t parentId = srcModel.bones[srcBoneId].parent;
-					uint32_t parentHumanBoneId = srcModel.bones[parentId].humanBoneId;
-					if (parentHumanBoneId != UINT32_MAX)
-					{
-						quat TPoseLocalR = srcModel.humanBoneCorrectionLocalR[humanBoneId] *
-							srcModel.humanBoneLocalR[humanBoneId];
-
-						//quat deltaR = inverse(TPoseLocalR) * r;
-						quat deltaR = r * inverse(TPoseLocalR);
-
-						quat srcParentWorldR = srcModel.humanBoneWorldR[parentHumanBoneId];
-						r = srcParentWorldR * deltaR * inverse(srcParentWorldR);
-						//r = inverse(srcParentWorldR) * deltaR * srcParentWorldR;
-
-						quat dstParentWorldR = dstModel.humanBoneWorldR[parentHumanBoneId];
-						r = inverse(dstParentWorldR) * r * dstParentWorldR;
-						//r = dstParentWorldR * r * inverse(dstParentWorldR);
-
-
-						quat modelStdTPoseR = dstModel.humanBoneCorrectionLocalR[humanBoneId] *
-							dstModel.humanBoneLocalR[humanBoneId];
-
-						//r = model.humanBoneLocalR[humanBoneId] * r;
-						r = r * modelStdTPoseR;
-
-					}
-
-				} while (0);
+								
+				CorrectHumanBoneRotation(dstModel, srcModel, r, humanBoneId);
 
 				targetChnl.mRotationKeys[k].mValue = aiQuaternion(r.w, r.x, r.y, r.z);
 			}
 		}
 	}
-	//srcAnim.channels
-
-	aiReturn ret = aiExportScene(scene, "fbx", filename, 0);
 
 	// maybe importer need it to release resources
 	scene->mNumAnimations = backupNumAnimations;
 	scene->mAnimations = backupAnimations;
+
+	aiReturn ret = aiExportScene(scene, "x", filename, 0);
+
 
 	return 0;
 }

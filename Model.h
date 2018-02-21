@@ -159,6 +159,7 @@ struct Model
 	std::vector<glm::quat>						humanBoneWorldR;
 	std::vector<glm::quat>						humanBoneLocalR;
 	std::vector<glm::quat>						humanBoneCorrectionLocalR;
+	std::vector<glm::vec3>						humanBoneLocalT;
 
 	int32_t Load(const char* filename);
 
