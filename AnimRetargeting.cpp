@@ -159,6 +159,12 @@ int32_t AnimRetargeting::OnInit()
 	lastY = -1;
 
 
+	OpenModel("assets\\archer_running.fbx");
+	openedModels[0].model->LoadAvatar("assets\\archer.json");
+
+	OpenModel("assets\\KB_Movement.fbx");
+	openedModels[1].model->LoadAvatar("assets\\KB_Movement.json");
+
 	return 0;
 }
 
@@ -393,7 +399,7 @@ void AnimRetargeting::OnMouseMove(int x, int y)
 void AnimRetargeting::OnMouseWheel(int delta)
 {
 	dist += delta * 0.0005f;
-	dist = clamp(dist, 1.5f, 3.5f);
+	dist = clamp(dist, 0.5f, 3.5f);
 }
 
 void AnimRetargeting::GUI()
@@ -806,35 +812,35 @@ void AnimRetargeting::UpdateBoneMatrices(const Model & model, std::vector<glm::m
 			//
 			//decompose(transpose(animModel.bones[srcBoneId].transform), t, r, s);
 
-			//if (!CorrectHumanBoneRotation(model, animModel, r, humanBoneId))
-			//	continue;
+			if (!CorrectHumanBoneRotation(model, animModel, r, humanBoneId))
+				continue;
 
-			uint32_t parentId = animModel.bones[srcBoneId].parent;
-			uint32_t parentHumanBoneId = animModel.bones[parentId].humanBoneId;
-			if (parentHumanBoneId != UINT32_MAX)
-			{
-				quat TPoseLocalR = animModel.humanBoneCorrectionLocalR[humanBoneId] *
-					animModel.humanBoneLocalR[humanBoneId];
+			//uint32_t parentId = animModel.bones[srcBoneId].parent;
+			//uint32_t parentHumanBoneId = animModel.bones[parentId].humanBoneId;
+			//if (parentHumanBoneId != UINT32_MAX)
+			//{
+			//	quat TPoseLocalR = animModel.humanBoneCorrectionLocalR[humanBoneId] *
+			//		animModel.humanBoneLocalR[humanBoneId];
 
-				//quat deltaR = inverse(TPoseLocalR) * r;
-				quat deltaR = r * inverse(TPoseLocalR);
+			//	//quat deltaR = inverse(TPoseLocalR) * r;
+			//	quat deltaR = r * inverse(TPoseLocalR);
 
-				quat srcParentWorldR = animModel.humanBoneWorldR[parentHumanBoneId];
-				r = srcParentWorldR * deltaR * inverse(srcParentWorldR);
-				//r = inverse(srcParentWorldR) * deltaR * srcParentWorldR;
+			//	quat srcParentWorldR = animModel.humanBoneWorldR[parentHumanBoneId];
+			//	r = srcParentWorldR * deltaR * inverse(srcParentWorldR);
+			//	//r = inverse(srcParentWorldR) * deltaR * srcParentWorldR;
 
-				quat dstParentWorldR = model.humanBoneWorldR[parentHumanBoneId];
-				r = inverse(dstParentWorldR) * r * dstParentWorldR;
-				//r = dstParentWorldR * r * inverse(dstParentWorldR);
+			//	quat dstParentWorldR = model.humanBoneWorldR[parentHumanBoneId];
+			//	r = inverse(dstParentWorldR) * r * dstParentWorldR;
+			//	//r = dstParentWorldR * r * inverse(dstParentWorldR);
 
 
-				quat modelStdTPoseR = model.humanBoneCorrectionLocalR[humanBoneId] *
-					model.humanBoneLocalR[humanBoneId];
+			//	quat modelStdTPoseR = model.humanBoneCorrectionLocalR[humanBoneId] *
+			//		model.humanBoneLocalR[humanBoneId];
 
-				//r = model.humanBoneLocalR[humanBoneId] * r;
-				r = r * modelStdTPoseR;
+			//	//r = model.humanBoneLocalR[humanBoneId] * r;
+			//	r = r * modelStdTPoseR;
 
-			}
+			//}
 
 			vec3 tt;
 			quat rr;

@@ -337,11 +337,21 @@ bool CorrectHumanBoneRotation(const Model & dstModel, const Model & srcModel, qu
 	uint32_t parentHumanBoneId = srcModel.bones[parentId].humanBoneId;
 	if (parentHumanBoneId != UINT32_MAX)
 	{
-		quat TPoseLocalR = srcModel.humanBoneCorrectionLocalR[humanBoneId] *
-			srcModel.humanBoneLocalR[humanBoneId];
+		bool isHand = (humanBoneId >= HumanBone::LeftHand &&
+			humanBoneId < HumanBone::RightShoulder) ||
+			(humanBoneId >= HumanBone::RightHand &&
+				humanBoneId < HumanBone::LeftUpLeg);
+
+		isHand = false;
+
+		quat TPoseLocalR = srcModel.humanBoneLocalR[humanBoneId];
+		if (!isHand)
+		{
+			TPoseLocalR = srcModel.humanBoneCorrectionLocalR[humanBoneId] * TPoseLocalR;
+		}
 
 		//quat deltaR = inverse(TPoseLocalR) * r;
-		quat deltaR = rotation * inverse(TPoseLocalR);
+		quat deltaR = rotation *  inverse(TPoseLocalR);
 
 		quat srcParentWorldR = srcModel.humanBoneWorldR[parentHumanBoneId];
 		deltaR = srcParentWorldR * deltaR * inverse(srcParentWorldR);
@@ -351,8 +361,12 @@ bool CorrectHumanBoneRotation(const Model & dstModel, const Model & srcModel, qu
 		deltaR = inverse(dstParentWorldR) * deltaR * dstParentWorldR;
 		//r = dstParentWorldR * r * inverse(dstParentWorldR);
 
-		quat modelStdTPoseR = dstModel.humanBoneCorrectionLocalR[humanBoneId] *
-			dstModel.humanBoneLocalR[humanBoneId];
+		quat modelStdTPoseR = dstModel.humanBoneLocalR[humanBoneId];
+
+		if (!isHand)
+		{
+			modelStdTPoseR = dstModel.humanBoneCorrectionLocalR[humanBoneId] * modelStdTPoseR;
+		}
 
 		//r = model.humanBoneLocalR[humanBoneId] * r;
 		rotation = deltaR * modelStdTPoseR;
