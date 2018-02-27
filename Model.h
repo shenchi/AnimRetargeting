@@ -161,6 +161,10 @@ struct Model
 	std::vector<glm::quat>						humanBoneCorrectionLocalR;
 	std::vector<glm::vec3>						humanBoneLocalT;
 
+	glm::vec3									rootOffset; // before scale
+	float										hipHeight; // before scale
+	float										scale = 0.01f;
+
 	int32_t Load(const char* filename);
 
 	int32_t LoadAvatar(const char* filename);

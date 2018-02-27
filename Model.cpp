@@ -361,6 +361,8 @@ bool CorrectHumanBoneRotation(const Model & dstModel, const Model & srcModel, qu
 		deltaR = inverse(dstParentWorldR) * deltaR * dstParentWorldR;
 		//r = dstParentWorldR * r * inverse(dstParentWorldR);
 
+		//deltaR = quat(1, 0, 0, 0);
+
 		quat modelStdTPoseR = dstModel.humanBoneLocalR[humanBoneId];
 
 		if (!isHand)
@@ -403,8 +405,8 @@ int32_t Model::Load(const char * filename)
 {
 	Assimp::Importer importer;
 
-	uint32_t flags = aiProcess_Triangulate | 
-		aiProcess_ConvertToLeftHanded | 
+	uint32_t flags = aiProcess_Triangulate |
+		aiProcess_ConvertToLeftHanded |
 		aiProcess_LimitBoneWeights;
 	const aiScene* scene = importer.ReadFile(filename, flags);
 
@@ -517,7 +519,7 @@ int32_t Model::LoadAvatar(const char * filename)
 
 	rapidjson::Document doc;
 	doc.Parse(buffer);
-	
+
 	free(buffer);
 
 	assert(!doc.HasParseError());
@@ -546,10 +548,10 @@ int32_t Model::LoadAvatar(const char * filename)
 			{
 				humanBoneBindings[i] = iter->second;
 				bones[iter->second].humanBoneId = i;
-				
+
 				quat rot;
 				vec3 scale, trans;
-				
+
 				if (bones[iter->second].hasOffsetMatrix)
 				{
 					humanBoneWorldMatrices[i] = inverse(transpose(bones[iter->second].offsetMatrix));
@@ -593,7 +595,7 @@ int32_t Model::LoadAvatar(const char * filename)
 			}
 		}
 	}
-	
+
 	// get local rotation for each bone in human skeleton
 	for (uint32_t i = 0; i < HumanBone::NumHumanBones; i++)
 	{
@@ -612,6 +614,15 @@ int32_t Model::LoadAvatar(const char * filename)
 			decompose(humanBoneLocalMatrices[i], t, r, s);
 			humanBoneLocalT[i] = t;
 		}
+	}
+
+	// get rootOffset and hipHeight
+	{
+		vec3 t, s;
+		quat r;
+		decompose(humanBoneWorldMatrices[HumanBone::Root], rootOffset, r, s);
+		decompose(humanBoneLocalMatrices[HumanBone::Hips], t, r, s);
+		hipHeight = t.y;
 	}
 
 	humanBoneCorrectionLocalR.resize(HumanBone::NumHumanBones, quat(1, 0, 0, 0));
@@ -664,7 +675,7 @@ int32_t Model::LoadAvatar(const char * filename)
 		rot = humanBoneCorrectionLocalR[i] * rot;
 		humanBoneLocalMatrices[i] = compose(trans, rot, scale);
 		humanBoneWorldMatrices[i] = humanBoneWorldMatrices[p] * humanBoneLocalMatrices[i];
-		
+
 		{
 			quat q = humanBoneCorrectionLocalR[i];
 			vec3 v = degrees(eulerAngles(q));
@@ -718,7 +729,75 @@ int32_t Model::SaveAvatar(const char * filename)
 void Model::GuessHumanBoneBindings()
 {
 	//humanBoneBindings
-	
+
+}
+
+namespace
+{
+	enum FbxNodeName
+	{
+		fbxTranslation,
+		fbxRotationOffset,
+		fbxRotationPivot,
+		fbxPreRotation,
+		fbxRotation,
+		fbxPostRotation,
+		fbxPivotInverse,
+		fbxScalingOffset,
+		fbxScalingPivot,
+		fbxScaling,
+		fbxScalingPivotInverse,
+		fbxNodeMax
+	};
+
+	std::unordered_map<std::string, uint32_t> fbxNodeNameTable =
+	{
+		{ "Translation", fbxTranslation },
+		{ "RotationOffset", fbxRotationOffset },
+		{ "RotationPivot", fbxRotationPivot },
+		{ "PreRotation", fbxPreRotation },
+		{ "Rotation", fbxRotation },
+		{ "PostRotation", fbxPostRotation },
+		{ "PivotInverse", fbxPivotInverse },
+		{ "ScalingOffset", fbxScalingOffset },
+		{ "ScalingPivot", fbxScalingPivot },
+		{ "Scaling", fbxScaling },
+		{ "ScalingPivotInverse", fbxScalingPivotInverse },
+	};
+
+	struct FbxNode
+	{
+		mat4 matrices[fbxNodeMax];
+
+		FbxNode()
+		{
+			for (uint32_t i = 0; i < fbxNodeMax; i++)
+				matrices[i] = mat4(1.0f);
+		}
+
+		void SetMatrix(FbxNodeName id, const mat4& matrix) { matrices[id] = matrix; }
+
+		void SetMatrix(const char* name, const mat4& matrix)
+		{
+			auto iter = fbxNodeNameTable.find(name);
+			if (iter == fbxNodeNameTable.end())
+			{
+				assert(false);
+				return;
+			}
+
+			SetMatrix((FbxNodeName)(iter->second), matrix);
+		}
+
+		mat4 GetMatrix() const
+		{
+			mat4 ret = matrices[0];
+			for (uint32_t i = 1; i < fbxNodeMax; i++)
+			{
+				ret = matrices[i] * ret;
+			}
+		}
+	};
 }
 
 int32_t Model::LoadBones(const aiNode* node)
@@ -730,8 +809,6 @@ int32_t Model::LoadBones(const aiNode* node)
 		Bone& bone = bones[boneId];
 		bone.name = string(node->mName.C_Str());
 
-		boneTable.insert(pair<string, uint32_t>(bone.name, boneId));
-		
 		const aiMatrix4x4& m = node->mTransformation;
 		bone.transform = mat4(
 			m.a1, m.a2, m.a3, m.a4,
@@ -742,7 +819,52 @@ int32_t Model::LoadBones(const aiNode* node)
 
 		bone.hasOffsetMatrix = 0;
 		bone.offsetMatrix = mat4(1.0f);
+
+		// deal with "$AssimpFbx$" issue
+		{
+			size_t idx = bone.name.find("$AssimpFbx$");
+			if (idx != string::npos)
+			{
+				string basename = bone.name.substr(0, idx - 1);
+				//size_t transIdx = idx + 12;
+				//string transname = bone.name.substr(transIdx);
+
+				bone.name = basename;
+
+				while (node->mNumChildren > 0)
+				{
+					const aiNode* child = node->mChildren[0];
+
+					string bonename(child->mName.C_Str());
+
+					if (bonename != bone.name)
+					{
+						idx = bonename.find("$AssimpFbx$");
+						if (idx == string::npos) break;
+
+						basename = bonename.substr(0, idx - 1);
+						if (basename != bone.name) break;
+					}
+
+					node = child;
+
+					const aiMatrix4x4& m = node->mTransformation;
+					mat4 mat = mat4(
+						m.a1, m.a2, m.a3, m.a4,
+						m.b1, m.b2, m.b3, m.b4,
+						m.c1, m.c2, m.c3, m.c4,
+						m.d1, m.d2, m.d3, m.d4
+					);
+
+					bone.transform = mat * bone.transform;
+				}
+
+			}
+		}
+
+		boneTable.insert(pair<string, uint32_t>(bone.name, boneId));
 	}
+
 	boneTree.resize(bones.size());
 
 	for (uint32_t i = 0; i < node->mNumChildren; i++)
@@ -878,7 +1000,7 @@ int32_t Model::LoadAnimations(const aiScene * scene)
 	for (uint32_t i = 0; i < scene->mNumAnimations; i++)
 	{
 		const aiAnimation* anim = scene->mAnimations[i];
-		
+
 		Animation clip = {};
 		clip.name = string(anim->mName.C_Str());
 		clip.lengthInTicks = float(anim->mDuration);
@@ -886,7 +1008,7 @@ int32_t Model::LoadAnimations(const aiScene * scene)
 		clip.length = float(anim->mDuration / anim->mTicksPerSecond);
 
 		for (uint32_t j = 0; j < anim->mNumChannels; j++)
-		{ 
+		{
 			const aiNodeAnim* nodeAnim = anim->mChannels[j];
 			Channel channel = {};
 			channel.name = nodeAnim->mNodeName.C_Str();

@@ -158,6 +158,11 @@ int32_t AnimRetargeting::OnInit()
 	lastX = -1;
 	lastY = -1;
 
+	//OpenModel("D:\\cs2083\\Assets\\Character\\Soldier.fbx");
+	//openedModels[0].model->LoadAvatar("D:\\cs2083\\Assets\\Character\\Soldier.json");
+
+	//OpenModel("D:\\cs2083\\code_blank\\assets\\archer_idle_renamed.fbx");
+	//OpenModel("D:\\cs2083\\Assets\\akai.fbx");
 
 	OpenModel("assets\\archer_running.fbx");
 	openedModels[0].model->LoadAvatar("assets\\archer.json");
@@ -207,7 +212,17 @@ int32_t AnimRetargeting::OnUpdate()
 	vec3 cameraDir = quat(vec3(pitch, yaw, 0.0f)) * vec3(0, 0, 1);
 	cameraPos = focusPoint - cameraDir * dist;
 	matView = transpose(lookAt(cameraPos, cameraPos + cameraDir, vec3(0, 1, 0)));
-	matModel = transpose(scale(mat4(1.0f), vec3(modelScale)));
+
+	if (selectedModelIdx < openedModels.size())
+	{
+		matModel = transpose(scale(mat4(1.0f), 
+			vec3(openedModels[selectedModelIdx].model->scale)
+		));
+	}
+	else
+	{
+		matModel = transpose(scale(mat4(1.0f), vec3(modelScale)));
+	}
 
 	{
 		D3D11_MAPPED_SUBRESOURCE res = {};
@@ -500,7 +515,14 @@ void AnimRetargeting::GUI_Models()
 			ImGui::EndCombo();
 		}
 
-		ImGui::InputFloat("Model Scale", &modelScale);
+		if (selectedModelIdx < openedModels.size())
+		{
+			ImGui::InputFloat("Model Scale", &(openedModels[selectedModelIdx].model->scale));
+		}
+		else
+		{
+			ImGui::InputFloat("Model Scale", &modelScale);
+		}
 
 		ImGui::Checkbox("Draw Bones", &showBones);
 		if (showBones)
@@ -844,9 +866,19 @@ void AnimRetargeting::UpdateBoneMatrices(const Model & model, std::vector<glm::m
 
 			vec3 tt;
 			quat rr;
-			if (humanBoneId == HumanBone::Hips || humanBoneId == HumanBone::Root)
+			if (humanBoneId == HumanBone::Root)
 			{
 				decompose(transpose(matrices[dstBoneId]), tt, rr, s);
+
+				t = ((t - animModel.rootOffset) * animModel.scale) / model.scale + model.rootOffset;
+			}
+			else if (humanBoneId == HumanBone::Hips)
+			{
+				decompose(transpose(matrices[dstBoneId]), tt, rr, s);
+
+				t.x = t.x * animModel.scale / model.scale;
+				t.y = (t.y - animModel.hipHeight) * animModel.scale / model.scale + model.hipHeight;
+				t.z = t.z * animModel.scale / model.scale;
 			}
 			else
 			{
@@ -913,7 +945,7 @@ void AnimRetargeting::UpdateHumanBoneTPose(const Model & model, std::vector<glm:
 		for (uint32_t i = 0; i < HumanBone::NumHumanBones; i++)
 		{
 			uint32_t boneId = model.humanBoneBindings[i];
-			if (boneId == UINT32_MAX) continue;
+			if (boneId == UINT32_MAX || !model.bones[boneId].hasOffsetMatrix) continue;
 
 			matrices[boneId] = inverse(model.bones[boneId].offsetMatrix);
 		}
