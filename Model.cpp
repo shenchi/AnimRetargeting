@@ -361,7 +361,7 @@ bool CorrectHumanBoneRotation(const Model & dstModel, const Model & srcModel, qu
 		deltaR = inverse(dstParentWorldR) * deltaR * dstParentWorldR;
 		//r = dstParentWorldR * r * inverse(dstParentWorldR);
 
-		//deltaR = quat(1, 0, 0, 0);
+		deltaR = quat(1, 0, 0, 0);
 
 		quat modelStdTPoseR = dstModel.humanBoneLocalR[humanBoneId];
 

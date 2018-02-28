@@ -158,17 +158,14 @@ int32_t AnimRetargeting::OnInit()
 	lastX = -1;
 	lastY = -1;
 
-	//OpenModel("D:\\cs2083\\Assets\\Character\\Soldier.fbx");
-	//openedModels[0].model->LoadAvatar("D:\\cs2083\\Assets\\Character\\Soldier.json");
-
-	//OpenModel("D:\\cs2083\\code_blank\\assets\\archer_idle_renamed.fbx");
-	//OpenModel("D:\\cs2083\\Assets\\akai.fbx");
+	OpenModel("assets\\Soldier.fbx");
+	openedModels[0].model->LoadAvatar("assets\\Soldier.json");
 
 	OpenModel("assets\\archer_running.fbx");
-	openedModels[0].model->LoadAvatar("assets\\archer.json");
+	openedModels[1].model->LoadAvatar("assets\\archer.json");
 
 	OpenModel("assets\\KB_Movement.fbx");
-	openedModels[1].model->LoadAvatar("assets\\KB_Movement.json");
+	openedModels[2].model->LoadAvatar("assets\\KB_Movement.json");
 
 	return 0;
 }
