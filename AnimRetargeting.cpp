@@ -164,8 +164,8 @@ int32_t AnimRetargeting::OnInit()
 	OpenModel("assets\\archer_running.fbx");
 	openedModels[1].model->LoadAvatar("assets\\archer.json");
 
-	OpenModel("assets\\KB_Movement.fbx");
-	openedModels[2].model->LoadAvatar("assets\\KB_Movement.json");
+	OpenModel("assets\\KB_Kicks.fbx");
+	openedModels[2].model->LoadAvatar("assets\\KB_Jumping.json");
 
 	return 0;
 }
@@ -714,7 +714,7 @@ void AnimRetargeting::AddLine(const glm::vec3 & from, const glm::vec3 & to, cons
 	gizmoBuffer.push_back(color.z);
 }
 
-glm::vec3 AnimRetargeting::SampleVec3Sequence(const std::vector<Vec3Frame>& frames, float time)
+glm::vec3 AnimRetargeting::SampleVec3Sequence(const std::vector<Vec3Frame>& frames, float time, const glm::vec3 defaultValue)
 {
 	if (frames.size() == 1)
 	{
@@ -731,11 +731,11 @@ glm::vec3 AnimRetargeting::SampleVec3Sequence(const std::vector<Vec3Frame>& fram
 			}
 		}
 	}
-	assert(false);
-	return glm::vec3();
+
+	return defaultValue;
 }
 
-glm::quat AnimRetargeting::SampleQuatSequence(const std::vector<QuatFrame>& frames, float time)
+glm::quat AnimRetargeting::SampleQuatSequence(const std::vector<QuatFrame>& frames, float time, const glm::quat defaultValue)
 {
 	if (frames.size() == 1)
 	{
@@ -752,8 +752,8 @@ glm::quat AnimRetargeting::SampleQuatSequence(const std::vector<QuatFrame>& fram
 			}
 		}
 	}
-	assert(false);
-	return glm::quat();
+
+	return defaultValue;
 }
 
 void AnimRetargeting::UpdateBoneMatrices(const Model & model, std::vector<glm::mat4>& matrices, uint32_t animId, float time)

@@ -1010,40 +1010,91 @@ int32_t Model::LoadAnimations(const aiScene * scene)
 		for (uint32_t j = 0; j < anim->mNumChannels; j++)
 		{
 			const aiNodeAnim* nodeAnim = anim->mChannels[j];
-			Channel channel = {};
-			channel.name = nodeAnim->mNodeName.C_Str();
+			Channel newChannel = {};
+			Channel* channel = &newChannel;
+			channel->name = nodeAnim->mNodeName.C_Str();
 
-			channel.translations.reserve(nodeAnim->mNumPositionKeys);
-			for (uint32_t k = 0; k < nodeAnim->mNumPositionKeys; k++)
+			bool omitT = false, omitR = false, omitS = false;
+
+			size_t idx = channel->name.find("$AssimpFbx$");
+			if (idx != string::npos)
 			{
-				aiVectorKey& frame = nodeAnim->mPositionKeys[k];
-				channel.translations.push_back(Vec3Frame{
-					vec3(frame.mValue.x, frame.mValue.y, frame.mValue.z),
-					float(frame.mTime)
-				});
+				string basename = channel->name.substr(0, idx - 1);
+				size_t transIdx = idx + 12;
+				string transname = channel->name.substr(transIdx);
+
+				channel->name = basename;
+
+				if (transname == "Translation")
+				{
+					omitR = true; omitS = true;
+				}
+				else if (transname == "Rotation")
+				{
+					omitT = true; omitS = true;
+				}
+				else if (transname == "Scaling")
+				{
+					omitT = true; omitR = true;
+				}
+				else
+				{
+					return __LINE__;
+				}
+
+				for (uint32_t k = 0; k < clip.channels.size(); k++)
+				{
+					if (clip.channels[k].name == basename)
+					{
+						channel = &(clip.channels[k]);
+						break;
+					}
+				}
 			}
 
-			channel.rotations.reserve(nodeAnim->mNumRotationKeys);
-			for (uint32_t k = 0; k < nodeAnim->mNumRotationKeys; k++)
+			if (!omitT)
 			{
-				aiQuatKey& frame = nodeAnim->mRotationKeys[k];
-				channel.rotations.push_back(QuatFrame{
-					quat(frame.mValue.w, frame.mValue.x, frame.mValue.y, frame.mValue.z),
-					float(frame.mTime)
-				});
+				channel->translations.reserve(nodeAnim->mNumPositionKeys);
+				for (uint32_t k = 0; k < nodeAnim->mNumPositionKeys; k++)
+				{
+					aiVectorKey& frame = nodeAnim->mPositionKeys[k];
+					channel->translations.push_back(Vec3Frame{
+						vec3(frame.mValue.x, frame.mValue.y, frame.mValue.z),
+						float(frame.mTime)
+					});
+				}
 			}
 
-			channel.scalings.reserve(nodeAnim->mNumScalingKeys);
-			for (uint32_t k = 0; k < nodeAnim->mNumScalingKeys; k++)
+			if (!omitR)
 			{
-				aiVectorKey& frame = nodeAnim->mScalingKeys[k];
-				channel.scalings.push_back(Vec3Frame{
-					vec3(frame.mValue.x, frame.mValue.y, frame.mValue.z),
-					float(frame.mTime)
-				});
+				channel->rotations.reserve(nodeAnim->mNumRotationKeys);
+				for (uint32_t k = 0; k < nodeAnim->mNumRotationKeys; k++)
+				{
+					aiQuatKey& frame = nodeAnim->mRotationKeys[k];
+					channel->rotations.push_back(QuatFrame{
+						quat(frame.mValue.w, frame.mValue.x, frame.mValue.y, frame.mValue.z),
+						float(frame.mTime)
+					});
+				}
 			}
 
-			clip.channels.push_back(channel);
+			if (!omitS)
+			{
+				channel->scalings.reserve(nodeAnim->mNumScalingKeys);
+				for (uint32_t k = 0; k < nodeAnim->mNumScalingKeys; k++)
+				{
+					aiVectorKey& frame = nodeAnim->mScalingKeys[k];
+					channel->scalings.push_back(Vec3Frame{
+						vec3(frame.mValue.x, frame.mValue.y, frame.mValue.z),
+						float(frame.mTime)
+					});
+				}
+			}
+
+			if (channel == &newChannel)
+			{
+				clip.channels.push_back(newChannel);
+			}
 		}
 
 		animations.push_back(clip);
