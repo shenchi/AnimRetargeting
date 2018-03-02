@@ -158,14 +158,14 @@ int32_t AnimRetargeting::OnInit()
 	lastX = -1;
 	lastY = -1;
 
-	OpenModel("assets\\Soldier.fbx");
-	openedModels[0].model->LoadAvatar("assets\\Soldier.json");
+	//OpenModel("assets\\Soldier.fbx");
+	//openedModels[0].model->LoadAvatar("assets\\Soldier.json");
 
-	OpenModel("assets\\archer_running.fbx");
-	openedModels[1].model->LoadAvatar("assets\\archer.json");
+	//OpenModel("assets\\archer_running.fbx");
+	//openedModels[1].model->LoadAvatar("assets\\archer.json");
 
 	OpenModel("assets\\KB_Kicks.fbx");
-	openedModels[2].model->LoadAvatar("assets\\KB_Jumping.json");
+	//openedModels[2].model->LoadAvatar("assets\\KB_Jumping.json");
 
 	return 0;
 }
@@ -246,9 +246,7 @@ int32_t AnimRetargeting::OnUpdate()
 			}
 		}
 
-		if (nullptr != anim && 
-			!ctx.model->humanBoneBindings.empty() &&
-			!animModel->humanBoneBindings.empty())
+		if (nullptr != anim)
 		{
 			if (isAnimPlaying)
 			{
@@ -256,7 +254,15 @@ int32_t AnimRetargeting::OnUpdate()
 				animPlaybackTime = fmod(animPlaybackTime, anim->length);
 			}
 
-			UpdateBoneMatrices(*ctx.model, ctx.boneMatrices, *animModel, selectedAnimIdx, animPlaybackTime);
+			if (!ctx.model->humanBoneBindings.empty() &&
+				!animModel->humanBoneBindings.empty())
+			{
+				UpdateBoneMatrices(*ctx.model, ctx.boneMatrices, *animModel, selectedAnimIdx, animPlaybackTime);
+			}
+			else if (selectedModelIdx == selectedAnimModelIdx)
+			{
+				UpdateBoneMatrices(*ctx.model, ctx.boneMatrices, selectedAnimIdx, animPlaybackTime);
+			}
 		}
 		else
 		{
@@ -714,7 +720,7 @@ void AnimRetargeting::AddLine(const glm::vec3 & from, const glm::vec3 & to, cons
 	gizmoBuffer.push_back(color.z);
 }
 
-glm::vec3 AnimRetargeting::SampleVec3Sequence(const std::vector<Vec3Frame>& frames, float time, const glm::vec3 defaultValue)
+glm::vec3 AnimRetargeting::SampleVec3Sequence(const std::vector<Vec3Frame>& frames, float time, const glm::vec3& defaultValue)
 {
 	if (frames.size() == 1)
 	{
@@ -735,7 +741,7 @@ glm::vec3 AnimRetargeting::SampleVec3Sequence(const std::vector<Vec3Frame>& fram
 	return defaultValue;
 }
 
-glm::quat AnimRetargeting::SampleQuatSequence(const std::vector<QuatFrame>& frames, float time, const glm::quat defaultValue)
+glm::quat AnimRetargeting::SampleQuatSequence(const std::vector<QuatFrame>& frames, float time, const glm::quat& defaultValue)
 {
 	if (frames.size() == 1)
 	{
@@ -779,9 +785,19 @@ void AnimRetargeting::UpdateBoneMatrices(const Model & model, std::vector<glm::m
 
 			vec3 t = SampleVec3Sequence(chnl.translations, ticks);
 			quat r = SampleQuatSequence(chnl.rotations, ticks);
-			vec3 s = SampleVec3Sequence(chnl.scalings, ticks);
+			vec3 s = SampleVec3Sequence(chnl.scalings, ticks, vec3(1.0f));
 
 			matrices[boneId] = transpose(compose(t, r, s));
+
+			/*mat4 parentMat(1.0f);
+			uint32_t p = model.bones[boneId].parent;
+			if (p != UINT32_MAX)
+			{
+				parentMat = model.bones[p].offsetMatrix;
+			}
+			mat4 bindpose = inverse(model.bones[boneId].offsetMatrix) * parentMat;
+
+			matrices[boneId] = transpose(compose(vec3(0.0f), r, s)) * bindpose;*/
 		}
 
 	}
@@ -827,7 +843,7 @@ void AnimRetargeting::UpdateBoneMatrices(const Model & model, std::vector<glm::m
 
 			vec3 t = SampleVec3Sequence(chnl.translations, ticks);
 			quat r = SampleQuatSequence(chnl.rotations, ticks);
-			vec3 s = SampleVec3Sequence(chnl.scalings, ticks);
+			vec3 s = SampleVec3Sequence(chnl.scalings, ticks, vec3(1.0f));
 			//
 			//decompose(transpose(animModel.bones[srcBoneId].transform), t, r, s);
 
