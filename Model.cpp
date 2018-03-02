@@ -291,6 +291,21 @@ namespace
 		HumanBone::RightFoot, //RightToeBase
 		HumanBone::RightToeBase, //RightToeBaseEnd
 	};
+
+	std::unordered_map<std::string, uint32_t> fbxNodeNameTable =
+	{
+		{ "Translation", fbxTranslation },
+		{ "RotationOffset", fbxRotationOffset },
+		{ "RotationPivot", fbxRotationPivot },
+		{ "PreRotation", fbxPreRotation },
+		{ "Rotation", fbxRotation },
+		{ "PostRotation", fbxPostRotation },
+		{ "PivotInverse", fbxRotationPivotInverse },
+		{ "ScalingOffset", fbxScalingOffset },
+		{ "ScalingPivot", fbxScalingPivot },
+		{ "Scaling", fbxScaling },
+		{ "ScalingPivotInverse", fbxScalingPivotInverse },
+	};
 }
 
 mat4 compose(const vec3& t, const quat& r, const vec3& s)
@@ -400,6 +415,38 @@ const char * HumanBone::name(uint32_t id)
 	if (id >= NumHumanBones) return nullptr;
 	return HumanBoneNames[id];
 }
+
+FbxNode::FbxNode()
+{
+	for (uint32_t i = 0; i < fbxNodeMax; i++)
+		matrices[i] = mat4(1.0f);
+}
+
+void FbxNode::SetMatrix(FbxNodeName id, const mat4& matrix) { matrices[id] = matrix; }
+
+void FbxNode::SetMatrix(const char* name, const mat4& matrix)
+{
+	auto iter = fbxNodeNameTable.find(name);
+	if (iter == fbxNodeNameTable.end())
+	{
+		assert(false);
+		return;
+	}
+
+	SetMatrix((FbxNodeName)(iter->second), matrix);
+}
+
+mat4 FbxNode::GetMatrix() const
+{
+	mat4 ret = matrices[0];
+	for (uint32_t i = 1; i < fbxNodeMax; i++)
+	{
+		ret = matrices[i] * ret;
+	}
+
+	return ret;
+}
+
 
 int32_t Model::Load(const char * filename)
 {
@@ -732,74 +779,6 @@ void Model::GuessHumanBoneBindings()
 
 }
 
-namespace
-{
-	enum FbxNodeName
-	{
-		fbxTranslation,
-		fbxRotationOffset,
-		fbxRotationPivot,
-		fbxPreRotation,
-		fbxRotation,
-		fbxPostRotation,
-		fbxPivotInverse,
-		fbxScalingOffset,
-		fbxScalingPivot,
-		fbxScaling,
-		fbxScalingPivotInverse,
-		fbxNodeMax
-	};
-
-	std::unordered_map<std::string, uint32_t> fbxNodeNameTable =
-	{
-		{ "Translation", fbxTranslation },
-		{ "RotationOffset", fbxRotationOffset },
-		{ "RotationPivot", fbxRotationPivot },
-		{ "PreRotation", fbxPreRotation },
-		{ "Rotation", fbxRotation },
-		{ "PostRotation", fbxPostRotation },
-		{ "PivotInverse", fbxPivotInverse },
-		{ "ScalingOffset", fbxScalingOffset },
-		{ "ScalingPivot", fbxScalingPivot },
-		{ "Scaling", fbxScaling },
-		{ "ScalingPivotInverse", fbxScalingPivotInverse },
-	};
-
-	struct FbxNode
-	{
-		mat4 matrices[fbxNodeMax];
-
-		FbxNode()
-		{
-			for (uint32_t i = 0; i < fbxNodeMax; i++)
-				matrices[i] = mat4(1.0f);
-		}
-
-		void SetMatrix(FbxNodeName id, const mat4& matrix) { matrices[id] = matrix; }
-
-		void SetMatrix(const char* name, const mat4& matrix)
-		{
-			auto iter = fbxNodeNameTable.find(name);
-			if (iter == fbxNodeNameTable.end())
-			{
-				assert(false);
-				return;
-			}
-
-			SetMatrix((FbxNodeName)(iter->second), matrix);
-		}
-
-		mat4 GetMatrix() const
-		{
-			mat4 ret = matrices[0];
-			for (uint32_t i = 1; i < fbxNodeMax; i++)
-			{
-				ret = matrices[i] * ret;
-			}
-		}
-	};
-}
-
 int32_t Model::LoadBones(const aiNode* node)
 {
 	uint32_t boneId = bones.size();
@@ -826,8 +805,21 @@ int32_t Model::LoadBones(const aiNode* node)
 			if (idx != string::npos)
 			{
 				string basename = bone.name.substr(0, idx - 1);
-				//size_t transIdx = idx + 12;
-				//string transname = bone.name.substr(transIdx);
+				size_t transIdx = idx + 12;
+				string transname = bone.name.substr(transIdx);
+
+				if (fbxNodeTable.find(basename) == fbxNodeTable.end())
+				{
+					fbxNodeTable.insert(pair<string, FbxNode>(basename, FbxNode()));
+				}
+
+				FbxNode& fbxNode = fbxNodeTable[basename];
+				fbxNode.SetMatrix(transname.c_str(), mat4(
+					m.a1, m.a2, m.a3, m.a4,
+					m.b1, m.b2, m.b3, m.b4,
+					m.c1, m.c2, m.c3, m.c4,
+					m.d1, m.d2, m.d3, m.d4
+				));
 
 				bone.name = basename;
 
@@ -855,6 +847,13 @@ int32_t Model::LoadBones(const aiNode* node)
 						m.c1, m.c2, m.c3, m.c4,
 						m.d1, m.d2, m.d3, m.d4
 					);
+
+					if (bonename != bone.name)
+					{
+						transIdx = idx + 12;
+						transname = bonename.substr(transIdx);
+						fbxNode.SetMatrix(transname.c_str(), mat);
+					}
 
 					bone.transform = mat * bone.transform;
 				}
@@ -1015,6 +1014,7 @@ int32_t Model::LoadAnimations(const aiScene * scene)
 			channel->name = nodeAnim->mNodeName.C_Str();
 
 			bool omitT = false, omitR = false, omitS = false;
+			FbxNode* fbxNode = nullptr;
 
 			size_t idx = channel->name.find("$AssimpFbx$");
 			if (idx != string::npos)
@@ -1050,6 +1050,13 @@ int32_t Model::LoadAnimations(const aiScene * scene)
 						break;
 					}
 				}
+
+				auto iter = fbxNodeTable.find(basename);
+				if (iter != fbxNodeTable.end())
+				{
+					fbxNode = &(iter->second);
+				}
+				assert(fbxNode != nullptr);
 			}
 
 			if (!omitT)
@@ -1071,8 +1078,23 @@ int32_t Model::LoadAnimations(const aiScene * scene)
 				for (uint32_t k = 0; k < nodeAnim->mNumRotationKeys; k++)
 				{
 					aiQuatKey& frame = nodeAnim->mRotationKeys[k];
+					quat q(frame.mValue.w, frame.mValue.x, frame.mValue.y, frame.mValue.z);
+
+					if (nullptr != fbxNode)
+					{
+						mat4 rot = fbxNode->matrices[fbxRotationPivotInverse] * 
+							fbxNode->matrices[fbxPostRotation] *
+							transpose(mat4_cast(q)) *
+							fbxNode->matrices[fbxPreRotation] *
+							fbxNode->matrices[fbxRotationPivot] *
+							fbxNode->matrices[fbxRotationOffset];
+
+						vec3 t, s;
+						decompose(transpose(rot), t, q, s);
+					}
+
 					channel->rotations.push_back(QuatFrame{
-						quat(frame.mValue.w, frame.mValue.x, frame.mValue.y, frame.mValue.z),
+						q,
 						float(frame.mTime)
 					});
 				}
@@ -1084,8 +1106,15 @@ int32_t Model::LoadAnimations(const aiScene * scene)
 				for (uint32_t k = 0; k < nodeAnim->mNumScalingKeys; k++)
 				{
 					aiVectorKey& frame = nodeAnim->mScalingKeys[k];
+					vec3 s(frame.mValue.x, frame.mValue.y, frame.mValue.z);
+
+					if (nullptr != fbxNode)
+					{
+						
+					}
+
 					channel->scalings.push_back(Vec3Frame{
-						vec3(frame.mValue.x, frame.mValue.y, frame.mValue.z),
+						s,
 						float(frame.mTime)
 					});
 				}

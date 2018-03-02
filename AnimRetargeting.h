@@ -44,9 +44,9 @@ private:
 
 	void AddLine(const glm::vec3& from, const glm::vec3& to, const glm::vec3& color = glm::vec3(1.0f));
 
-	glm::vec3 SampleVec3Sequence(const std::vector<Vec3Frame>& frames, float time, const glm::vec3 defaultValue = glm::vec3(0.0f));
+	glm::vec3 SampleVec3Sequence(const std::vector<Vec3Frame>& frames, float time, const glm::vec3& defaultValue = glm::vec3(0.0f));
 
-	glm::quat SampleQuatSequence(const std::vector<QuatFrame>& frames, float time, const glm::quat defaultValue = glm::quat(1, 0, 0, 0));
+	glm::quat SampleQuatSequence(const std::vector<QuatFrame>& frames, float time, const glm::quat& defaultValue = glm::quat(1, 0, 0, 0));
 
 	void UpdateBoneMatrices(const Model& model, std::vector<glm::mat4>& matrices, uint32_t animId, float time);
 
