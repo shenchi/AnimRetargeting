@@ -93,6 +93,36 @@ extern glm::mat4 compose(const glm::vec3& t, const glm::quat& r, const glm::vec3
 
 extern void decompose(const glm::mat4& m, glm::vec3& t, glm::quat& r, glm::vec3& s);
 
+
+enum FbxNodeName
+{
+	fbxTranslation,
+	fbxRotationOffset,
+	fbxRotationPivot,
+	fbxPreRotation,
+	fbxRotation,
+	fbxPostRotation,
+	fbxRotationPivotInverse,
+	fbxScalingOffset,
+	fbxScalingPivot,
+	fbxScaling,
+	fbxScalingPivotInverse,
+	fbxNodeMax
+};
+
+struct FbxNode
+{
+	glm::mat4 matrices[fbxNodeMax];
+
+	FbxNode();
+
+	void SetMatrix(FbxNodeName id, const glm::mat4& matrix);
+
+	void SetMatrix(const char* name, const glm::mat4& matrix);
+
+	glm::mat4 GetMatrix() const;
+};
+
 struct Bone
 {
 	glm::mat4				transform;
@@ -154,6 +184,8 @@ struct Model
 
 	std::vector<Animation>						animations;
 	std::unordered_map<std::string, uint32_t>	animTable;
+
+	std::unordered_map<std::string, FbxNode>	fbxNodeTable;
 
 	std::vector<uint32_t>						humanBoneBindings;
 	std::vector<glm::quat>						humanBoneWorldR;
