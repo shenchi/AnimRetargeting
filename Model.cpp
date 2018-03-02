@@ -821,32 +821,32 @@ int32_t Model::LoadBones(const aiNode* node)
 					m.d1, m.d2, m.d3, m.d4
 				));
 
-		//		bone.name = basename;
+				bone.name = basename;
 
-		//		while (node->mNumChildren > 0)
-		//		{
-		//			const aiNode* child = node->mChildren[0];
+				while (node->mNumChildren > 0)
+				{
+					const aiNode* child = node->mChildren[0];
 
-		//			string bonename(child->mName.C_Str());
+					string bonename(child->mName.C_Str());
 
-		//			if (bonename != bone.name)
-		//			{
-		//				idx = bonename.find("$AssimpFbx$");
-		//				if (idx == string::npos) break;
+					if (bonename != bone.name)
+					{
+						idx = bonename.find("$AssimpFbx$");
+						if (idx == string::npos) break;
 
-		//				basename = bonename.substr(0, idx - 1);
-		//				if (basename != bone.name) break;
-		//			}
+						basename = bonename.substr(0, idx - 1);
+						if (basename != bone.name) break;
+					}
 
-		//			node = child;
+					node = child;
 
-		//			const aiMatrix4x4& m = node->mTransformation;
-		//			mat4 mat = mat4(
-		//				m.a1, m.a2, m.a3, m.a4,
-		//				m.b1, m.b2, m.b3, m.b4,
-		//				m.c1, m.c2, m.c3, m.c4,
-		//				m.d1, m.d2, m.d3, m.d4
-		//			);
+					const aiMatrix4x4& m = node->mTransformation;
+					mat4 mat = mat4(
+						m.a1, m.a2, m.a3, m.a4,
+						m.b1, m.b2, m.b3, m.b4,
+						m.c1, m.c2, m.c3, m.c4,
+						m.d1, m.d2, m.d3, m.d4
+					);
 
 					if (bonename != bone.name)
 					{
@@ -858,8 +858,8 @@ int32_t Model::LoadBones(const aiNode* node)
 					bone.transform = mat * bone.transform;
 				}
 
-		//	}
-		//}
+			}
+		}
 
 		boneTable.insert(pair<string, uint32_t>(bone.name, boneId));
 	}
@@ -1016,31 +1016,31 @@ int32_t Model::LoadAnimations(const aiScene * scene)
 			bool omitT = false, omitR = false, omitS = false;
 			FbxNode* fbxNode = nullptr;
 
-			//size_t idx = channel->name.find("$AssimpFbx$");
-			//if (idx != string::npos)
-			//{
-			//	string basename = channel->name.substr(0, idx - 1);
-			//	size_t transIdx = idx + 12;
-			//	string transname = channel->name.substr(transIdx);
+			size_t idx = channel->name.find("$AssimpFbx$");
+			if (idx != string::npos)
+			{
+				string basename = channel->name.substr(0, idx - 1);
+				size_t transIdx = idx + 12;
+				string transname = channel->name.substr(transIdx);
 
-			//	channel->name = basename;
+				channel->name = basename;
 
-			//	if (transname == "Translation")
-			//	{
-			//		omitR = true; omitS = true;
-			//	}
-			//	else if (transname == "Rotation")
-			//	{
-			//		omitT = true; omitS = true;
-			//	}
-			//	else if (transname == "Scaling")
-			//	{
-			//		omitT = true; omitR = true;
-			//	}
-			//	else
-			//	{
-			//		return __LINE__;
-			//	}
+				if (transname == "Translation")
+				{
+					omitR = true; omitS = true;
+				}
+				else if (transname == "Rotation")
+				{
+					omitT = true; omitS = true;
+				}
+				else if (transname == "Scaling")
+				{
+					omitT = true; omitR = true;
+				}
+				else
+				{
+					return __LINE__;
+				}
 
 				for (uint32_t k = 0; k < clip.channels.size(); k++)
 				{
