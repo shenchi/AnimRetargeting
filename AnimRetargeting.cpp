@@ -158,14 +158,15 @@ int32_t AnimRetargeting::OnInit()
 	lastX = -1;
 	lastY = -1;
 
+	uint32_t id = 0;
 	//OpenModel("assets\\Soldier.fbx");
-	//openedModels[0].model->LoadAvatar("assets\\Soldier.json");
+	//openedModels[id++].model->LoadAvatar("assets\\Soldier.json");
 
-	//OpenModel("assets\\archer_running.fbx");
-	//openedModels[1].model->LoadAvatar("assets\\archer.json");
+	OpenModel("assets\\archer_running.fbx");
+	openedModels[id++].model->LoadAvatar("assets\\archer.json");
 
 	OpenModel("assets\\KB_Kicks.fbx");
-	//openedModels[2].model->LoadAvatar("assets\\KB_Jumping.json");
+	openedModels[id++].model->LoadAvatar("assets\\KB_Jumping.json");
 
 	return 0;
 }
