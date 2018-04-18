@@ -300,7 +300,7 @@ namespace
 		{ "PreRotation", fbxPreRotation },
 		{ "Rotation", fbxRotation },
 		{ "PostRotation", fbxPostRotation },
-		{ "PivotInverse", fbxRotationPivotInverse },
+		{ "RotationPivotInverse", fbxRotationPivotInverse },
 		{ "ScalingOffset", fbxScalingOffset },
 		{ "ScalingPivot", fbxScalingPivot },
 		{ "Scaling", fbxScaling },
