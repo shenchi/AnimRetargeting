@@ -162,11 +162,11 @@ int32_t AnimRetargeting::OnInit()
 	//OpenModel("assets\\Soldier.fbx");
 	//openedModels[id++].model->LoadAvatar("assets\\Soldier.json");
 
-	OpenModel("assets\\archer_running.fbx");
-	openedModels[id++].model->LoadAvatar("assets\\archer.json");
-
-	OpenModel("assets\\KB_Kicks.fbx");
-	openedModels[id++].model->LoadAvatar("assets\\KB_Jumping.json");
+	//OpenModel("assets\\archer_running.fbx");
+	//openedModels[id++].model->LoadAvatar("assets\\archer.json");
+	//
+	//OpenModel("assets\\KB_Kicks.fbx");
+	//openedModels[id++].model->LoadAvatar("assets\\KB_Jumping.json");
 
 	return 0;
 }
@@ -423,8 +423,8 @@ void AnimRetargeting::OnMouseWheel(int delta)
 
 void AnimRetargeting::GUI()
 {
-	static bool showDemo = true;
-	ImGui::ShowDemoWindow(&showDemo);
+	//static bool showDemo = true;
+	//ImGui::ShowDemoWindow(&showDemo);
 
 	GUI_Models();
 

@@ -145,7 +145,7 @@ int32_t Application::Init()
 
 	hWnd = CreateWindow(
 		L"MainWClass",        // name of window class 
-		L"Sample",            // title-bar string 
+		L"Animation Retargeting Tool",            // title-bar string 
 		WS_OVERLAPPEDWINDOW, // top-level window 
 		CW_USEDEFAULT,       // default horizontal position 
 		CW_USEDEFAULT,       // default vertical position 
